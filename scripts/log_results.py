@@ -21,6 +21,9 @@ import os, sys, time
 import requests
 import pandas as pd
 from datetime import date as date_cls, timedelta
+from dotenv import load_dotenv
+
+load_dotenv()
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -196,6 +199,50 @@ def print_calibration_summary():
         print(f"\n  Need more positive-edge plays to evaluate (have {len(pos_edge)} so far).")
 
 
+def backfill_tracked_bets(date_str, pred_df):
+    """
+    After results are logged, update tracked_bets rows for this date
+    that are still pending (hit_hr IS NULL).
+    """
+    import psycopg2
+    db_url = os.getenv('DATABASE_URL')
+    if not db_url:
+        print("  DATABASE_URL not set -- skipping tracked_bets backfill.")
+        return
+
+    # Build lookup: batter_id -> hit_hr (0 or 1; skip -1 = unknown)
+    settled = pred_df[pred_df['hit_hr'] >= 0][['batter', 'hit_hr']].copy()
+    if settled.empty:
+        return
+
+    try:
+        conn = psycopg2.connect(db_url)
+        try:
+            updated = 0
+            with conn:
+                with conn.cursor() as cur:
+                    for _, row in settled.iterrows():
+                        cur.execute(
+                            """
+                            UPDATE tracked_bets
+                               SET hit_hr = %s
+                             WHERE game_date = %s
+                               AND batter    = %s
+                               AND hit_hr IS NULL
+                            """,
+                            (bool(row['hit_hr']), date_str, int(row['batter'])),
+                        )
+                        updated += cur.rowcount
+            if updated:
+                print(f"  Backfilled {updated} tracked bet(s) with results.")
+            else:
+                print("  No pending tracked bets for this date.")
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f"  WARNING: tracked_bets backfill failed: {e}")
+
+
 def run(date_str=None):
     if date_str is None:
         date_str = (date_cls.today() - timedelta(days=1)).isoformat()
@@ -262,6 +309,9 @@ def run(date_str=None):
     save_cols = [c for c in LOG_COLUMNS if c in pred_df.columns]
     total_rows = append_to_log(pred_df[save_cols])
     print(f"\n  Appended {len(pred_df)} rows to {LOG_PATH}  ({total_rows} total rows in log)")
+
+    # Backfill tracked_bets results
+    backfill_tracked_bets(date_str, pred_df)
 
     # Running calibration summary
     print_calibration_summary()

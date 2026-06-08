@@ -25,6 +25,22 @@ sys.path.insert(0, ROOT)
 DATABASE_URL = os.getenv('DATABASE_URL')
 OUTPUTS_DIR  = 'data/outputs'
 
+CREATE_TRACKED_BETS = """
+CREATE TABLE IF NOT EXISTS tracked_bets (
+    id          SERIAL PRIMARY KEY,
+    game_date   DATE        NOT NULL,
+    batter      BIGINT      NOT NULL,
+    player_name TEXT,
+    team_abbr   TEXT,
+    adj_prob    FLOAT,
+    best_odds   INTEGER,
+    edge        FLOAT,
+    stake_units FLOAT       NOT NULL,
+    hit_hr      BOOLEAN,
+    created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+"""
+
 CREATE_TABLE = """
 CREATE TABLE IF NOT EXISTS hr_predictions (
     id              SERIAL PRIMARY KEY,
@@ -144,6 +160,7 @@ def run(date_str=None):
         with conn:
             with conn.cursor() as cur:
                 cur.execute(CREATE_TABLE)
+                cur.execute(CREATE_TRACKED_BETS)
                 for _, row in df.iterrows():
                     cur.execute(UPSERT, {
                         'game_date':     date_str,

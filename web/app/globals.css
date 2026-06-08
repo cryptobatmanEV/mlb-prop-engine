@@ -1,3 +1,51 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --font-mono:  'IBM Plex Mono', monospace;
+  --font-syne:  'Syne', sans-serif;
+  --ev-bg:      #0a0d0f;
+  --ev-card:    rgba(255, 255, 255, 0.03);
+  --ev-border:  rgba(255, 255, 255, 0.07);
+  --ev-green:   #00dc6e;
+  --ev-red:     #ff4d4d;
+  --ev-gold:    #ffc800;
+  --ev-blue:    #80a8ff;
+  --ev-text:    #ffffff;
+  --ev-muted:   rgba(255, 255, 255, 0.4);
+  --ev-dim:     rgba(255, 255, 255, 0.3);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-font-smoothing: antialiased; }
+
+body {
+  background: var(--ev-bg);
+  color: var(--ev-text);
+  font-family: var(--font-mono), monospace;
+}
+
+/* Table row hover — CSS-only so it works in Server Components */
+.pred-row:nth-child(even) { background: rgba(255, 255, 255, 0.01); }
+.pred-row:hover            { background: rgba(255, 255, 255, 0.04) !important; }
+
+/* Tracker row hover */
+.bet-row:hover { background: rgba(255, 255, 255, 0.03) !important; }
+
+/* Remove number input spinners */
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+input[type='number'] { -moz-appearance: textfield; }
+
+/* Modal overlay */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}

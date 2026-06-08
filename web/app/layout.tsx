@@ -1,18 +1,32 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { IBM_Plex_Mono, Syne } from 'next/font/google';
 import './globals.css';
 
-const inter = Inter({ subsets: ['latin'] });
+const ibmPlexMono = IBM_Plex_Mono({
+  subsets: ['latin'],
+  weight: ['300', '400', '500', '600', '700'],
+  variable: '--font-mono',
+  display: 'swap',
+});
+
+const syne = Syne({
+  subsets: ['latin'],
+  weight: ['700', '800'],
+  variable: '--font-syne',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
-  title: 'MLB HR Props',
-  description: "Today's MLB home run prop predictions",
+  title: 'The +EV Cave',
+  description: 'MLB HR prop model — edge-first',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={inter.className}>{children}</body>
+      <body className={`${ibmPlexMono.variable} ${syne.variable} font-mono`}>
+        {children}
+      </body>
     </html>
   );
 }
