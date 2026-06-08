@@ -27,24 +27,26 @@ OUTPUTS_DIR  = 'data/outputs'
 
 CREATE_TRACKED_BETS = """
 CREATE TABLE IF NOT EXISTS tracked_bets (
-    id          SERIAL PRIMARY KEY,
-    game_date   DATE        NOT NULL,
-    batter      BIGINT      NOT NULL,
-    player_name TEXT,
-    team_abbr   TEXT,
-    adj_prob    FLOAT,
-    best_odds   INTEGER,
-    edge        FLOAT,
-    stake_units FLOAT       NOT NULL,
-    hit_hr      BOOLEAN,
-    settled     BOOLEAN     NOT NULL DEFAULT false,
-    created_at  TIMESTAMPTZ DEFAULT NOW(),
+    id           SERIAL PRIMARY KEY,
+    game_date    DATE        NOT NULL,
+    batter       BIGINT      NOT NULL,
+    player_name  TEXT,
+    team_abbr    TEXT,
+    adj_prob     FLOAT,
+    tracked_odds INTEGER,
+    edge         FLOAT,
+    stake_units  FLOAT       NOT NULL,
+    hit_hr       BOOLEAN     DEFAULT NULL,
+    settled      BOOLEAN     NOT NULL DEFAULT false,
+    created_at   TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE (game_date, batter)
 );
 """
 
-# Migrations for tables created before settled / UNIQUE were added
+# Migrations for tables created before this schema
 MIGRATE_TRACKED_BETS = [
+    "ALTER TABLE tracked_bets RENAME COLUMN best_odds TO tracked_odds",
+    "ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS tracked_odds INTEGER",
     "ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS settled BOOLEAN NOT NULL DEFAULT false",
     "ALTER TABLE tracked_bets ADD CONSTRAINT IF NOT EXISTS tracked_bets_date_batter_key UNIQUE (game_date, batter)",
 ]

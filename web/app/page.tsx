@@ -6,18 +6,18 @@ export const dynamic = 'force-dynamic';
 // ── Types ──────────────────────────────────────────────────────────────────
 
 type TrackedBet = {
-  id:          number;
-  game_date:   string;
-  batter:      number;
-  player_name: string;
-  team_abbr:   string;
-  adj_prob:    number | null;
-  best_odds:   number | null;
-  edge:        number | null;
-  stake_units: number;
-  hit_hr:      boolean | null;
-  settled:     boolean;
-  created_at:  string;
+  id:           number;
+  game_date:    string;
+  batter:       number;
+  player_name:  string;
+  team_abbr:    string;
+  adj_prob:     number | null;
+  tracked_odds: number | null;
+  edge:         number | null;
+  stake_units:  number;
+  hit_hr:       boolean | null;
+  settled:      boolean;
+  created_at:   string;
 };
 
 type TrackerStats = {
@@ -35,17 +35,11 @@ function fmtOdds(o: number | null) {
   return o > 0 ? `+${o}` : `${o}`;
 }
 
-function edgeColor(edge: number | null, hasLine: boolean): string {
-  if (!hasLine || edge == null) return 'var(--ev-dim)';
-  if (edge > 0.05)  return 'var(--ev-green)';
-  if (edge > 0)     return 'var(--ev-green)';
-  if (edge > -0.03) return 'var(--ev-muted)';
-  return 'var(--ev-red)';
-}
-
-function fmtEdgeText(edge: number | null, hasLine: boolean): string {
-  if (!hasLine || edge == null) return '—';
-  return `${edge > 0 ? '+' : ''}${(edge * 100).toFixed(1)}%`;
+function fmtEdge(edge: number | null, hasLine: boolean): { text: string; color: string } {
+  if (!hasLine || edge == null) return { text: '—', color: 'var(--ev-dim)' };
+  const text = `${edge > 0 ? '+' : ''}${(edge * 100).toFixed(1)}%`;
+  const color = edge > 0 ? 'var(--ev-green)' : edge > -0.03 ? 'var(--ev-muted)' : 'var(--ev-red)';
+  return { text, color };
 }
 
 function fmtPL(profit: number, settled: number) {
@@ -89,15 +83,25 @@ const TH: React.CSSProperties = {
 // ── Page ───────────────────────────────────────────────────────────────────
 
 export default async function Home() {
-  const today = new Date().toLocaleDateString('en-US', {
+  // Date + time context (ET)
+  const now = new Date();
+  const today = now.toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
     timeZone: 'America/New_York',
   }).toUpperCase();
 
-  let rows:    Row[]              = [];
-  let dbError: string | null      = null;
-  let tracker: TrackerStats | null = null;
-  let bets:    TrackedBet[]        = [];
+  const etHourStr = now.toLocaleString('en-US', {
+    timeZone: 'America/New_York',
+    hour:     'numeric',
+    hour12:   false,
+  });
+  const isBeforeLineups = parseInt(etHourStr, 10) < 15; // before 3 PM ET
+
+  let rows:        Row[]              = [];
+  let dbError:     string | null      = null;
+  let lastUpdated: string | null      = null;
+  let tracker:     TrackerStats | null = null;
+  let bets:        TrackedBet[]        = [];
 
   // Primary: predictions
   try {
@@ -107,6 +111,18 @@ export default async function Home() {
       WHERE game_date = CURRENT_DATE
       ORDER BY adj_prob DESC
     `) as Row[];
+
+    // Last updated timestamp
+    const lu = await sql`
+      SELECT MAX(created_at) AS ts
+      FROM hr_predictions
+      WHERE game_date = CURRENT_DATE
+    `;
+    if (lu[0]?.ts) {
+      lastUpdated = new Date(lu[0].ts as string).toLocaleTimeString('en-US', {
+        hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/New_York',
+      });
+    }
   } catch (err) {
     dbError = err instanceof Error ? err.message : String(err);
   }
@@ -117,22 +133,22 @@ export default async function Home() {
       const sql = getDb();
       const stats = await sql`
         SELECT
-          COUNT(*)::int                                                                      AS total_bets,
-          COUNT(*) FILTER (WHERE hit_hr IS NOT NULL)::int                                   AS settled_bets,
-          COUNT(*) FILTER (WHERE hit_hr = true)::int                                        AS wins,
-          COALESCE(SUM(CASE WHEN hit_hr IS NOT NULL THEN stake_units ELSE 0 END), 0)::float AS settled_staked,
+          COUNT(*)::int                                                                           AS total_bets,
+          COUNT(*) FILTER (WHERE hit_hr IS NOT NULL)::int                                        AS settled_bets,
+          COUNT(*) FILTER (WHERE hit_hr = true)::int                                             AS wins,
+          COALESCE(SUM(CASE WHEN hit_hr IS NOT NULL THEN stake_units ELSE 0 END), 0)::float      AS settled_staked,
           COALESCE(SUM(CASE
-            WHEN hit_hr = true  AND best_odds >  0 THEN stake_units * (best_odds::float / 100.0)
-            WHEN hit_hr = true  AND best_odds <= 0 THEN stake_units * (100.0 / ABS(best_odds::float))
-            WHEN hit_hr = false                    THEN -stake_units
+            WHEN hit_hr = true  AND tracked_odds >  0 THEN stake_units * (tracked_odds::float / 100.0)
+            WHEN hit_hr = true  AND tracked_odds <= 0 THEN stake_units * (100.0 / ABS(tracked_odds::float))
+            WHEN hit_hr = false                       THEN -stake_units
             ELSE 0
           END), 0)::float AS total_profit
         FROM tracked_bets
       `;
       tracker = stats[0] as TrackerStats;
-      bets    = (await sql`SELECT * FROM tracked_bets ORDER BY created_at DESC LIMIT 20`) as TrackedBet[];
+      bets    = (await sql`SELECT * FROM tracked_bets ORDER BY created_at DESC LIMIT 30`) as TrackedBet[];
     } catch {
-      // tracked_bets doesn't exist yet
+      // tracked_bets not yet created
     }
   }
 
@@ -149,7 +165,7 @@ export default async function Home() {
 
   return (
     <main style={{ minHeight: '100vh', background: 'var(--ev-bg)', padding: '32px 20px 60px' }}>
-      <div style={{ maxWidth: '1340px', margin: '0 auto' }}>
+      <div style={{ maxWidth: '1380px', margin: '0 auto' }}>
 
         {/* Header */}
         <header style={{ marginBottom: '28px' }}>
@@ -162,8 +178,15 @@ export default async function Home() {
           }}>
             MLB HR PROPS
           </h1>
-          <div style={{ ...LABEL, color: 'var(--ev-muted)', marginTop: '6px', letterSpacing: '1px' }}>
-            {today}
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '16px', marginTop: '6px', flexWrap: 'wrap' }}>
+            <div style={{ ...LABEL, color: 'var(--ev-muted)', letterSpacing: '1px' }}>
+              {today}
+            </div>
+            {lastUpdated && (
+              <div style={{ ...LABEL, color: 'var(--ev-dim)', letterSpacing: '1px' }}>
+                UPDATED {lastUpdated} ET
+              </div>
+            )}
           </div>
           {rows.length > 0 && (
             <div style={{ ...LABEL, color: 'var(--ev-dim)', marginTop: '4px', letterSpacing: '1px' }}>
@@ -176,19 +199,34 @@ export default async function Home() {
         {dbError ? (
           <div style={{ ...CARD, padding: '40px', textAlign: 'center' }}>
             <div style={{ ...LABEL, color: 'var(--ev-muted)', marginBottom: '8px' }}>NO DATA LOADED</div>
-            <div style={{ fontSize: '11px', color: 'var(--ev-dim)' }}>
-              Check DATABASE_URL in Vercel env vars, then run the pipeline.
+            <div style={{ fontSize: '11px', color: 'var(--ev-dim)', marginBottom: '8px' }}>
+              Check DATABASE_URL in Vercel environment variables.
             </div>
-            <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.15)', marginTop: '8px', wordBreak: 'break-all' }}>
+            <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.15)', wordBreak: 'break-all' }}>
               {dbError}
             </div>
           </div>
         ) : rows.length === 0 ? (
-          <div style={{ ...CARD, padding: '40px', textAlign: 'center' }}>
-            <div style={{ ...LABEL, color: 'var(--ev-muted)', marginBottom: '8px' }}>NO PREDICTIONS YET</div>
-            <div style={{ fontSize: '11px', color: 'var(--ev-dim)' }}>
-              <code>python scripts/daily_pipeline.py</code>
-            </div>
+          <div style={{ ...CARD, padding: '48px', textAlign: 'center' }}>
+            {isBeforeLineups ? (
+              <>
+                <div style={{ ...LABEL, color: 'var(--ev-muted)', marginBottom: '8px', fontSize: '11px', letterSpacing: '3px' }}>
+                  LINEUPS NOT POSTED YET
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--ev-dim)' }}>
+                  MLB lineups typically post around 3 PM ET. Run the pipeline after they drop.
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ ...LABEL, color: 'var(--ev-muted)', marginBottom: '8px' }}>
+                  NO PREDICTIONS YET
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--ev-dim)' }}>
+                  <code style={{ fontFamily: 'var(--font-mono)' }}>python scripts/daily_pipeline.py</code>
+                </div>
+              </>
+            )}
           </div>
         ) : (
           <PropsTable rows={rows} />
@@ -229,39 +267,47 @@ export default async function Home() {
                   {
                     label: 'BETS',
                     value: String(totalBets),
-                    sub:   totalBets - settledBets > 0 ? `${totalBets - settledBets} PENDING` : 'ALL SETTLED',
+                    sub:   totalBets - settledBets > 0
+                      ? `${totalBets - settledBets} PENDING`
+                      : 'ALL SETTLED',
                     color: 'var(--ev-text)',
                   },
                   {
                     label: 'WIN RATE',
                     value: winRate,
-                    sub:   `${wins}W / ${settledBets - wins}L`,
+                    sub:   settledBets > 0 ? `${wins}W / ${settledBets - wins}L` : `${settledBets} SETTLED`,
                     color: 'var(--ev-text)',
                   },
                   {
                     label: 'P/L',
                     value: fmtPL(profit, settledBets),
                     sub:   `${settledBets} SETTLED`,
-                    color: settledBets === 0 ? 'var(--ev-dim)' : profit >= 0 ? 'var(--ev-green)' : 'var(--ev-red)',
+                    color: settledBets === 0
+                      ? 'var(--ev-dim)'
+                      : profit >= 0 ? 'var(--ev-green)' : 'var(--ev-red)',
                   },
                   {
                     label: 'ROI',
                     value: fmtROI(profit, staked),
                     sub:   `${staked.toFixed(1)}u STAKED`,
-                    color: staked === 0 ? 'var(--ev-dim)' : profit >= 0 ? 'var(--ev-green)' : 'var(--ev-red)',
+                    color: staked === 0
+                      ? 'var(--ev-dim)'
+                      : profit >= 0 ? 'var(--ev-green)' : 'var(--ev-red)',
                   },
-                ] as { label: string; value: string; sub: string; color: string }[]).map(({ label, value, sub, color }) => (
-                  <div key={label} style={{ background: 'var(--ev-bg)', padding: '16px 18px' }}>
-                    <div style={LABEL}>{label}</div>
-                    <div style={{
-                      fontFamily: 'var(--font-syne)', fontWeight: 800,
-                      fontSize: '22px', color, margin: '8px 0 4px', letterSpacing: '-0.5px',
-                    }}>
-                      {value}
+                ] as { label: string; value: string; sub: string; color: string }[]).map(
+                  ({ label, value, sub, color }) => (
+                    <div key={label} style={{ background: 'var(--ev-bg)', padding: '16px 18px' }}>
+                      <div style={LABEL}>{label}</div>
+                      <div style={{
+                        fontFamily: 'var(--font-syne)', fontWeight: 800,
+                        fontSize: '22px', color, margin: '8px 0 4px', letterSpacing: '-0.5px',
+                      }}>
+                        {value}
+                      </div>
+                      <div style={{ ...LABEL, fontSize: '9px' }}>{sub}</div>
                     </div>
-                    <div style={{ ...LABEL, fontSize: '9px' }}>{sub}</div>
-                  </div>
-                ))}
+                  )
+                )}
               </div>
 
               {/* Recent bets table */}
@@ -270,13 +316,16 @@ export default async function Home() {
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'var(--font-mono)', fontSize: '11px' }}>
                     <thead>
                       <tr style={{ borderBottom: '1px solid var(--ev-border)' }}>
-                        {(['DATE', 'PLAYER', 'TEAM', 'ODDS', 'EDGE', 'STAKE', 'RESULT'] as const).map((h, i) => (
-                          <th key={h} style={{ ...TH, textAlign: i >= 3 ? 'right' : 'left' }}>{h}</th>
-                        ))}
+                        {(['DATE', 'PLAYER', 'TEAM', 'ODDS', 'EDGE', 'STAKE', 'RESULT'] as const).map(
+                          (h, i) => (
+                            <th key={h} style={{ ...TH, textAlign: i >= 3 ? 'right' : 'left' }}>{h}</th>
+                          )
+                        )}
                       </tr>
                     </thead>
                     <tbody>
                       {bets.map(bet => {
+                        const { text: edgeText, color: edgeCol } = fmtEdge(bet.edge, bet.tracked_odds != null);
                         const resultColor =
                           bet.hit_hr == null ? 'var(--ev-dim)' :
                           bet.hit_hr         ? 'var(--ev-green)' : 'var(--ev-red)';
@@ -289,13 +338,10 @@ export default async function Home() {
                             <td style={{ padding: '8px 14px', color: 'var(--ev-text)' }}>{bet.player_name}</td>
                             <td style={{ padding: '8px 14px', color: 'var(--ev-muted)' }}>{bet.team_abbr}</td>
                             <td style={{ padding: '8px 14px', textAlign: 'right', color: 'var(--ev-blue)' }}>
-                              {fmtOdds(bet.best_odds)}
+                              {fmtOdds(bet.tracked_odds)}
                             </td>
-                            <td style={{
-                              padding: '8px 14px', textAlign: 'right',
-                              color: edgeColor(bet.edge, bet.best_odds != null),
-                            }}>
-                              {fmtEdgeText(bet.edge, bet.best_odds != null)}
+                            <td style={{ padding: '8px 14px', textAlign: 'right', color: edgeCol }}>
+                              {edgeText}
                             </td>
                             <td style={{ padding: '8px 14px', textAlign: 'right', color: 'var(--ev-muted)' }}>
                               {bet.stake_units}u
