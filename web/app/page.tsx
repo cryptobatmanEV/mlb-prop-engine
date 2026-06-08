@@ -59,13 +59,6 @@ function fmtWind(windFavor: number | null, isDome: boolean) {
 }
 
 export default async function Home() {
-  const sql = getDb();
-  const rows = (await sql`
-    SELECT * FROM hr_predictions
-    WHERE game_date = CURRENT_DATE
-    ORDER BY adj_prob DESC
-  `) as Row[];
-
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
     month: 'long',
@@ -73,6 +66,20 @@ export default async function Home() {
     year: 'numeric',
     timeZone: 'America/New_York',
   });
+
+  let rows: Row[] = [];
+  let dbError: string | null = null;
+
+  try {
+    const sql = getDb();
+    rows = (await sql`
+      SELECT * FROM hr_predictions
+      WHERE game_date = CURRENT_DATE
+      ORDER BY adj_prob DESC
+    `) as Row[];
+  } catch (err) {
+    dbError = err instanceof Error ? err.message : String(err);
+  }
 
   const withLine = rows.filter((r) => r.has_line).length;
   const posEdge = rows.filter((r) => r.edge != null && r.edge > 0).length;
@@ -91,7 +98,15 @@ export default async function Home() {
           )}
         </div>
 
-        {rows.length === 0 ? (
+        {dbError ? (
+          <div className="text-center py-20">
+            <p className="text-gray-400 text-lg">No predictions loaded yet.</p>
+            <p className="text-gray-600 text-sm mt-2">
+              Run the daily pipeline to generate today&apos;s card.
+            </p>
+            <p className="text-gray-800 text-xs mt-4 font-mono">{dbError}</p>
+          </div>
+        ) : rows.length === 0 ? (
           <div className="text-center py-20">
             <p className="text-gray-400 text-lg">No predictions for today yet.</p>
             <p className="text-gray-600 text-sm mt-2">
