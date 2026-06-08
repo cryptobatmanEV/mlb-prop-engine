@@ -171,6 +171,7 @@ def fetch_contact_rates(season):
                 'player_id': s['player']['id'],
                 'k_pct':     so / pa,
                 'bb_pct':    bb / pa,
+                'season_hr': int(s['stat'].get('homeRuns', 0)),
             })
         df = pd.DataFrame(rows)
         print(f"  Contact rates: {len(df)} batters with >= 20 PA this season")
@@ -293,11 +294,11 @@ def build_prediction_df(date_str, games, rosters,
             dict(batters=rosters.get(game['home_id'], []),
                  pitcher_id=game['away_pitcher_id'],
                  pitcher_name=game['away_pitcher_name'],
-                 team_id=game['home_id'], team_abbr=home_abbr),
+                 team_id=game['home_id'], team_abbr=home_abbr, is_home='H'),
             dict(batters=rosters.get(game['away_id'], []),
                  pitcher_id=game['home_pitcher_id'],
                  pitcher_name=game['home_pitcher_name'],
-                 team_id=game['away_id'], team_abbr=game['away_abbr']),
+                 team_id=game['away_id'], team_abbr=game['away_abbr'], is_home='A'),
         ]
 
         for side in sides:
@@ -340,6 +341,7 @@ def build_prediction_df(date_str, games, rosters,
                     'player_name':  batter['name'],
                     'team_abbr':    side['team_abbr'],
                     'home_team':    home_abbr,
+                    'is_home':      side['is_home'],
                     'stand':        stand,
                     'pitcher_name': side['pitcher_name'],
                     'pitcher_id':   p_id,
@@ -503,11 +505,12 @@ def run(date_str=None):
     # Ordered output columns — identifiers first, then prediction columns,
     # then the per-component columns needed by Priority 4 fair-odds conversion
     out_cols = [
-        'player_name', 'team_abbr', 'stand', 'pitcher_name', 'p_throws', 'home_team',
+        'player_name', 'team_abbr', 'stand', 'pitcher_name', 'p_throws', 'home_team', 'is_home',
         'model_prob',
         'k_pct', 'bb_pct', 'contact_rate', 'exp_pa', 'p_contact_game',
         'adj_prob',                     # <-- input to fair-odds conversion
         'hr_park_factor', 'temp_f', 'wind_speed', 'wind_favor', 'is_dome',
+        'season_hr',
         'game_date', 'game_id', 'batter',
     ]
     pred_df[[c for c in out_cols if c in pred_df.columns]].to_csv(out_path, index=False)

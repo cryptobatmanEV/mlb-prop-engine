@@ -68,6 +68,10 @@ _TEAM_KEYS = [
 ]
 _ABBR_KEYS = {abbr: keys for abbr, keys in _TEAM_KEYS}
 
+# Expected PAs by batting order slot (used to refine adj_prob once bat_order is known)
+EXP_PA_BY_ORDER = {1: 4.3, 2: 4.2, 3: 4.1, 4: 4.0, 5: 3.9, 6: 3.7, 7: 3.6, 8: 3.5, 9: 3.4}
+EXP_PA_DEFAULT  = 3.8
+
 
 # ── Utilities ─────────────────────────────────────────────────────────────────
 
@@ -197,12 +201,18 @@ def fetch_lineups_by_game(date_str, schedule_games):
             for g in date_block.get('games', []):
                 pk = int(g['gamePk'])
                 ids = set()
+                batting_order = {}
                 for side in ('homePlayers', 'awayPlayers'):
+                    pos = 1
                     for p in g.get('lineups', {}).get(side, []):
                         if p.get('primaryPosition', {}).get('type') != 'Pitcher':
-                            ids.add(int(p['id']))
+                            pid = int(p['id'])
+                            ids.add(pid)
+                            batting_order[pid] = pos
+                            pos += 1
                 if ids:
-                    result[pk] = {'starters': ids, 'source': 'mlb_schedule'}
+                    result[pk] = {'starters': ids, 'source': 'mlb_schedule',
+                                  'batting_order': batting_order}
     except Exception as e:
         print(f"  hydrate=lineups failed: {e}")
 
@@ -218,11 +228,15 @@ def fetch_lineups_by_game(date_str, schedule_games):
             r.raise_for_status()
             box = r.json().get('liveData', {}).get('boxscore', {}).get('teams', {})
             ids = set()
+            batting_order = {}
             for side in ('home', 'away'):
-                for pid in box.get(side, {}).get('battingOrder', []):
+                bo_list = box.get(side, {}).get('battingOrder', [])
+                for pos, pid in enumerate(bo_list, 1):
                     ids.add(int(pid))
+                    batting_order[int(pid)] = pos
             if ids:
-                result[pk] = {'starters': ids, 'source': 'live_feed'}
+                result[pk] = {'starters': ids, 'source': 'live_feed',
+                              'batting_order': batting_order}
             time.sleep(0.2)
         except Exception:
             pass
@@ -232,7 +246,7 @@ def fetch_lineups_by_game(date_str, schedule_games):
 
 # ── [4] Hard lineup filter ────────────────────────────────────────────────────
 
-def apply_lineup_filter(pred_df, starter_ids, starter_source):
+def apply_lineup_filter(pred_df, starter_ids, starter_source, batting_order=None):
     """Keep only confirmed starters; log every dropped player."""
     pred_df = pred_df.copy()
 
@@ -244,6 +258,11 @@ def apply_lineup_filter(pred_df, starter_ids, starter_source):
     else:
         pred_df['in_lineup']    = 0
         pred_df['lineup_source'] = 'unconfirmed'
+
+    if batting_order:
+        pred_df['bat_order'] = pred_df['batter'].map(batting_order)
+    else:
+        pred_df['bat_order'] = None
 
     starters = pred_df[pred_df['in_lineup'] == 1].copy()
     dropped  = pred_df[pred_df['in_lineup'] == 0].copy()
@@ -341,38 +360,42 @@ def match_games_to_events(schedule_games, events):
 
 def fetch_props_for_events(event_ids):
     """
-    Fetch batter_home_runs (Over 0.5) lines for the given OddsAPI event IDs.
-    Costs 1 API credit per event ID.
+    Fetch batter_home_runs (Over 0.5) lines and game totals for the given OddsAPI event IDs.
+    Costs 1 API credit per event ID. totals market is fetched in the same call at no extra cost.
 
-    Returns (all_lines_df, credits_used, failed_count, last_remaining_str).
+    Returns (all_lines_df, game_totals_dict, credits_used, failed_count, last_remaining_str).
+    game_totals_dict maps event_id -> O/U total (float).
     """
     if not event_ids:
-        return pd.DataFrame(), 0, 0, '?'
+        return pd.DataFrame(), {}, 0, 0, '?'
 
-    rows, credits_used, failed, last_remaining = [], 0, 0, '?'
+    rows, game_totals, credits_used, failed, last_remaining = [], {}, 0, 0, '?'
 
     for event_id in event_ids:
         try:
             r, data = _odds_get(
                 f'/v4/sports/baseball_mlb/events/{event_id}/odds',
-                {'regions': 'us,us_ex', 'markets': 'batter_home_runs',
+                {'regions': 'us,us_ex', 'markets': 'batter_home_runs,totals',
                  'oddsFormat': 'american'},
             )
             last_remaining = r.headers.get('x-requests-remaining', last_remaining)
             credits_used += 1
             for bm in data.get('bookmakers', []):
                 for mkt in bm.get('markets', []):
-                    if mkt['key'] != 'batter_home_runs':
-                        continue
-                    for outcome in mkt.get('outcomes', []):
-                        # Only anytime-HR (Over 0.5). Exclude 1.5+ markets.
-                        if outcome.get('name') == 'Over' and outcome.get('point', 0) == 0.5:
-                            rows.append({
-                                'player_name_raw': outcome.get('description', ''),
-                                'bookmaker':       bm['key'],
-                                'odds_american':   int(outcome['price']),
-                                'event_id':        event_id,
-                            })
+                    if mkt['key'] == 'batter_home_runs':
+                        for outcome in mkt.get('outcomes', []):
+                            # Only anytime-HR (Over 0.5). Exclude 1.5+ markets.
+                            if outcome.get('name') == 'Over' and outcome.get('point', 0) == 0.5:
+                                rows.append({
+                                    'player_name_raw': outcome.get('description', ''),
+                                    'bookmaker':       bm['key'],
+                                    'odds_american':   int(outcome['price']),
+                                    'event_id':        event_id,
+                                })
+                    elif mkt['key'] == 'totals' and event_id not in game_totals:
+                        for outcome in mkt.get('outcomes', []):
+                            if outcome.get('name') == 'Over' and event_id not in game_totals:
+                                game_totals[event_id] = float(outcome.get('point', 0))
             time.sleep(0.4)
         except requests.HTTPError as e:
             code = e.response.status_code
@@ -387,12 +410,12 @@ def fetch_props_for_events(event_ids):
             failed += 1
 
     if not rows:
-        return pd.DataFrame(), credits_used, failed, last_remaining
+        return pd.DataFrame(), game_totals, credits_used, failed, last_remaining
 
     all_df = pd.DataFrame(rows)
     all_df['implied']   = all_df['odds_american'].apply(american_to_implied)
     all_df['name_norm'] = all_df['player_name_raw'].apply(norm_name)
-    return all_df, credits_used, failed, last_remaining
+    return all_df, game_totals, credits_used, failed, last_remaining
 
 
 def _best_lines(all_df):
@@ -403,6 +426,34 @@ def _best_lines(all_df):
             .sort_values('odds_american', ascending=False)
             .groupby('name_norm', as_index=False)
             .first())
+
+
+def fetch_recent_hr_batters(date_str, batter_ids):
+    """
+    Returns the subset of batter_ids who hit >= 1 HR in their last 5 games
+    before date_str, using data/processed/batter_features.parquet.
+    Returns empty set on any failure (graceful degradation).
+    """
+    feat_path = os.path.join('data', 'processed', 'batter_features.parquet')
+    if not os.path.exists(feat_path):
+        return set()
+    try:
+        import pandas as pd
+        df = pd.read_parquet(feat_path, columns=['batter', 'game_date', 'hr'])
+        df['game_date'] = pd.to_datetime(df['game_date'])
+        cutoff = pd.Timestamp(date_str)
+        past = df[(df['game_date'] < cutoff) & (df['batter'].isin(batter_ids))]
+        if past.empty:
+            return set()
+        hot = set()
+        for bid, grp in past.groupby('batter'):
+            last_5_dates = sorted(grp['game_date'].unique())[-5:]
+            if grp[grp['game_date'].isin(last_5_dates)]['hr'].sum() > 0:
+                hot.add(bid)
+        return hot
+    except Exception as e:
+        print(f"  WARNING: recent HR check failed ({e}) -- skipping HOT badge")
+        return set()
 
 
 # ── [8] Join odds + edge ──────────────────────────────────────────────────────
@@ -512,11 +563,12 @@ def save_output(df, date_str):
 
     out_cols = [
         'player_name', 'team_abbr', 'stand', 'pitcher_name', 'p_throws', 'home_team',
-        'lineup_source',
+        'is_home', 'lineup_source',
         'adj_prob', 'fair_odds',
         'has_line', 'best_book', 'best_odds', 'book_implied', 'edge',
-        'model_prob', 'k_pct', 'bb_pct', 'contact_rate', 'p_contact_game',
+        'model_prob', 'k_pct', 'bb_pct', 'contact_rate', 'exp_pa', 'p_contact_game',
         'hr_park_factor', 'temp_f', 'wind_speed', 'wind_favor', 'is_dome',
+        'season_hr', 'bat_order', 'game_total', 'recent_hr',
         'game_date', 'game_id', 'batter',
     ]
     save_cols = [c for c in out_cols if c in df.columns]
@@ -669,23 +721,50 @@ def run(date_str=None):
     new_pks = {g['game_pk'] for g in new_games}
     new_pred_df = pred_df[pred_df['game_id'].isin(new_pks)].copy()
 
-    # Combine starter IDs across all new games; use the most authoritative source
+    # Combine starter IDs and batting order across all new games
     combined_starter_ids = set()
+    combined_batting_order = {}
     source_priority = {'mlb_schedule': 1, 'live_feed': 2}
     best_source = 'mlb_schedule'
     for g in new_games:
         info = lineups_by_game[g['game_pk']]
         combined_starter_ids |= info['starters']
+        combined_batting_order.update(info.get('batting_order', {}))
         if source_priority.get(info['source'], 0) > source_priority.get(best_source, 0):
             best_source = info['source']
 
-    new_starters_df, _ = apply_lineup_filter(new_pred_df, combined_starter_ids, best_source)
+    new_starters_df, _ = apply_lineup_filter(
+        new_pred_df, combined_starter_ids, best_source, combined_batting_order
+    )
     if new_starters_df.empty:
         print("  No starters matched predictions for new games -- check player ID alignment.")
         print_run_summary(schedule_games, lineups_by_game, already_priced_pks,
                           new_games, credits_events, credits_props, failed_count,
                           credits_remaining, len(already_priced_pks))
         return existing_df
+
+    # Refine adj_prob using actual batting order (replaces flat EXP_PA_DEFAULT)
+    if new_starters_df['bat_order'].notna().any():
+        exp_pa = new_starters_df['bat_order'].map(EXP_PA_BY_ORDER).fillna(EXP_PA_DEFAULT)
+        cr = new_starters_df.get('contact_rate', None)
+        mp = new_starters_df.get('model_prob', None)
+        if cr is not None and mp is not None:
+            new_starters_df = new_starters_df.copy()
+            new_starters_df['exp_pa'] = exp_pa
+            new_starters_df['p_contact_game'] = 1 - (1 - new_starters_df['contact_rate'].fillna(0.7)) ** exp_pa
+            new_starters_df['adj_prob'] = new_starters_df['model_prob'] * new_starters_df['p_contact_game']
+            print(f"  Refined adj_prob using batting order "
+                  f"(exp_pa range: {exp_pa.min():.1f}-{exp_pa.max():.1f})")
+
+    # Tag batters with a HR in their last 5 games
+    hot_batters = fetch_recent_hr_batters(date_str, set(new_starters_df['batter']))
+    new_starters_df = new_starters_df.copy()
+    new_starters_df['recent_hr'] = new_starters_df['batter'].isin(hot_batters).astype(int)
+    if hot_batters:
+        hot_names = new_starters_df.loc[
+            new_starters_df['batter'].isin(hot_batters), 'player_name'
+        ].tolist()
+        print(f"  HOT (HR in last 5 games): {hot_names}")
 
     # [5] OddsAPI: events list (1 credit, only if there are new games)
     print("\n[5] Fetching OddsAPI events list...")
@@ -704,16 +783,21 @@ def run(date_str=None):
         print(f"  No OddsAPI event found for: {labels} (will price without lines)")
 
     # [7] Fetch props only for matched new events
+    game_totals = {}
     new_event_ids = [game_to_event[g['game_pk']] for g in matched]
     if new_event_ids:
         print(f"\n[7] Fetching HR props for {len(new_event_ids)} new event(s)...")
-        all_odds_df, credits_props, failed_count, credits_remaining = \
+        all_odds_df, game_totals, credits_props, failed_count, credits_remaining = \
             fetch_props_for_events(new_event_ids)
         if not all_odds_df.empty:
             n_books = all_odds_df['bookmaker'].nunique()
             avg     = all_odds_df.groupby('name_norm').size().mean()
             print(f"  {len(_best_lines(all_odds_df))} players with lines | "
                   f"{n_books} bookmaker(s) | {avg:.1f} lines/player avg")
+        n_totals = len(game_totals)
+        if n_totals:
+            print(f"  {n_totals} game O/U total(s) fetched: "
+                  f"{[f'{v}' for v in game_totals.values()]}")
     else:
         print("\n[7] No new events to fetch odds for.")
 
@@ -722,6 +806,15 @@ def run(date_str=None):
     # [8] Join odds + edge for new starters
     print("\n[8] Joining odds and computing edge...")
     new_result_df = join_odds_and_edge(new_starters_df, best_odds_df)
+
+    # Map event_id -> game_pk -> game_total and attach to each row
+    if game_totals:
+        event_to_pk = {v: k for k, v in game_to_event.items()}
+        game_total_by_pk = {event_to_pk[eid]: total
+                            for eid, total in game_totals.items()
+                            if eid in event_to_pk}
+        new_result_df = new_result_df.copy()
+        new_result_df['game_total'] = new_result_df['game_id'].map(game_total_by_pk)
     n_lined = new_result_df['has_line'].sum()
     print(f"  {n_lined} / {len(new_result_df)} new starters matched to market lines")
     if not best_odds_df.empty and n_lined < len(new_result_df):

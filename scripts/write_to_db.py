@@ -51,6 +51,14 @@ MIGRATE_TRACKED_BETS = [
     "ALTER TABLE tracked_bets ADD CONSTRAINT IF NOT EXISTS tracked_bets_date_batter_key UNIQUE (game_date, batter)",
 ]
 
+MIGRATE_HR_PREDICTIONS = [
+    "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS is_home TEXT",
+    "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS season_hr INTEGER",
+    "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS bat_order INTEGER",
+    "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS game_total FLOAT",
+    "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS recent_hr INTEGER",
+]
+
 CREATE_TABLE = """
 CREATE TABLE IF NOT EXISTS hr_predictions (
     id              SERIAL PRIMARY KEY,
@@ -63,6 +71,7 @@ CREATE TABLE IF NOT EXISTS hr_predictions (
     pitcher_name    TEXT,
     p_throws        TEXT,
     home_team       TEXT,
+    is_home         TEXT,
     lineup_source   TEXT,
     adj_prob        FLOAT,
     fair_odds       INTEGER,
@@ -77,6 +86,10 @@ CREATE TABLE IF NOT EXISTS hr_predictions (
     wind_speed      FLOAT,
     wind_favor      FLOAT,
     is_dome         BOOLEAN,
+    season_hr       INTEGER,
+    bat_order       INTEGER,
+    game_total      FLOAT,
+    recent_hr       INTEGER,
     created_at      TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE (game_date, batter, game_id)
 );
@@ -85,19 +98,22 @@ CREATE TABLE IF NOT EXISTS hr_predictions (
 UPSERT = """
 INSERT INTO hr_predictions (
     game_date, batter, game_id,
-    player_name, team_abbr, stand, pitcher_name, p_throws, home_team, lineup_source,
+    player_name, team_abbr, stand, pitcher_name, p_throws, home_team, is_home, lineup_source,
     adj_prob, fair_odds, has_line, best_book, best_odds, book_implied, edge,
-    model_prob, hr_park_factor, temp_f, wind_speed, wind_favor, is_dome
+    model_prob, hr_park_factor, temp_f, wind_speed, wind_favor, is_dome,
+    season_hr, bat_order, game_total, recent_hr
 ) VALUES (
     %(game_date)s, %(batter)s, %(game_id)s,
     %(player_name)s, %(team_abbr)s, %(stand)s, %(pitcher_name)s, %(p_throws)s,
-    %(home_team)s, %(lineup_source)s,
+    %(home_team)s, %(is_home)s, %(lineup_source)s,
     %(adj_prob)s, %(fair_odds)s, %(has_line)s, %(best_book)s, %(best_odds)s,
     %(book_implied)s, %(edge)s,
-    %(model_prob)s, %(hr_park_factor)s, %(temp_f)s, %(wind_speed)s, %(wind_favor)s, %(is_dome)s
+    %(model_prob)s, %(hr_park_factor)s, %(temp_f)s, %(wind_speed)s, %(wind_favor)s, %(is_dome)s,
+    %(season_hr)s, %(bat_order)s, %(game_total)s, %(recent_hr)s
 )
 ON CONFLICT (game_date, batter, game_id) DO UPDATE SET
     player_name    = EXCLUDED.player_name,
+    is_home        = EXCLUDED.is_home,
     lineup_source  = EXCLUDED.lineup_source,
     adj_prob       = EXCLUDED.adj_prob,
     fair_odds      = EXCLUDED.fair_odds,
@@ -112,6 +128,10 @@ ON CONFLICT (game_date, batter, game_id) DO UPDATE SET
     wind_speed     = EXCLUDED.wind_speed,
     wind_favor     = EXCLUDED.wind_favor,
     is_dome        = EXCLUDED.is_dome,
+    season_hr      = EXCLUDED.season_hr,
+    bat_order      = EXCLUDED.bat_order,
+    game_total     = EXCLUDED.game_total,
+    recent_hr      = EXCLUDED.recent_hr,
     created_at     = NOW();
 """
 
@@ -171,7 +191,7 @@ def run(date_str=None):
             with conn.cursor() as cur:
                 cur.execute(CREATE_TABLE)
                 cur.execute(CREATE_TRACKED_BETS)
-                for stmt in MIGRATE_TRACKED_BETS:
+                for stmt in MIGRATE_HR_PREDICTIONS + MIGRATE_TRACKED_BETS:
                     try:
                         cur.execute(stmt)
                     except Exception:
@@ -187,6 +207,7 @@ def run(date_str=None):
                         'pitcher_name':  _str(row.get('pitcher_name')),
                         'p_throws':      _str(row.get('p_throws')),
                         'home_team':     _str(row.get('home_team')),
+                        'is_home':       _str(row.get('is_home')),
                         'lineup_source': _str(row.get('lineup_source')),
                         'adj_prob':      _clean(row.get('adj_prob')),
                         'fair_odds':     _int(row.get('fair_odds')),
@@ -201,6 +222,10 @@ def run(date_str=None):
                         'wind_speed':    _clean(row.get('wind_speed')),
                         'wind_favor':    _clean(row.get('wind_favor')),
                         'is_dome':       _bool(row.get('is_dome')),
+                        'season_hr':     _int(row.get('season_hr')),
+                        'bat_order':     _int(row.get('bat_order')),
+                        'game_total':    _clean(row.get('game_total')),
+                        'recent_hr':     _int(row.get('recent_hr')),
                     })
         print(f"  Done -- {len(df)} rows upserted.")
     finally:
