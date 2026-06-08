@@ -9,6 +9,7 @@ Steps (run in order):
     1. update_statcast  -- pull new Statcast batted-ball data through yesterday
     2. daily_runner     -- score today's batters, output predictions CSV
     3. fair_odds        -- filter to confirmed starters, join market lines, compute edge
+    4. write_to_db      -- upsert today's fair_odds into Neon PostgreSQL (powers web app)
 
 Output files:
     data/predictions/predictions_{date}.csv   -- raw model scores for all roster players
@@ -61,12 +62,17 @@ def run(date_str=None):
 
     # Step 3: fair odds (non-fatal -- predictions are already saved)
     from predict.fair_odds import run as odds_run
-    _run_step(f"Step 3/3  Fair odds ({date_str})", odds_run, date_str)
+    _run_step(f"Step 3/4  Fair odds ({date_str})", odds_run, date_str)
+
+    # Step 4: write to Neon DB (non-fatal -- CSV is the source of truth)
+    from scripts.write_to_db import run as db_run
+    _run_step(f"Step 4/4  Write to DB ({date_str})", db_run, date_str)
 
     print(f"\n{'#'*60}")
     print(f"#  Done  --  {date_str}")
     print(f"#  Predictions : data/predictions/predictions_{date_str}.csv")
     print(f"#  Fair odds   : data/outputs/fair_odds_{date_str}.csv")
+    print(f"#  Web app     : powered by Neon DB (check your Vercel URL)")
     print(f"#")
     print(f"#  Tomorrow morning, log actual results:")
     print(f"#  python scripts/log_results.py {date_str}")

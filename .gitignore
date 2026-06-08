@@ -1,5 +1,8 @@
-.env 
-__pycache__/ 
-data/raw/ 
-models/saved/*.pkl 
-.DS_Store 
+.env
+__pycache__/
+data/raw/
+models/saved/*.pkl
+.DS_Store
+web/.env.local
+web/node_modules/
+web/.next/
