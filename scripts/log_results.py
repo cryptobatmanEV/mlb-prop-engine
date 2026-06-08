@@ -225,7 +225,8 @@ def backfill_tracked_bets(date_str, pred_df):
                         cur.execute(
                             """
                             UPDATE tracked_bets
-                               SET hit_hr = %s
+                               SET hit_hr  = %s,
+                                   settled = true
                              WHERE game_date = %s
                                AND batter    = %s
                                AND hit_hr IS NULL

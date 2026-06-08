@@ -37,9 +37,17 @@ CREATE TABLE IF NOT EXISTS tracked_bets (
     edge        FLOAT,
     stake_units FLOAT       NOT NULL,
     hit_hr      BOOLEAN,
-    created_at  TIMESTAMPTZ DEFAULT NOW()
+    settled     BOOLEAN     NOT NULL DEFAULT false,
+    created_at  TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (game_date, batter)
 );
 """
+
+# Migrations for tables created before settled / UNIQUE were added
+MIGRATE_TRACKED_BETS = [
+    "ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS settled BOOLEAN NOT NULL DEFAULT false",
+    "ALTER TABLE tracked_bets ADD CONSTRAINT IF NOT EXISTS tracked_bets_date_batter_key UNIQUE (game_date, batter)",
+]
 
 CREATE_TABLE = """
 CREATE TABLE IF NOT EXISTS hr_predictions (
@@ -161,6 +169,11 @@ def run(date_str=None):
             with conn.cursor() as cur:
                 cur.execute(CREATE_TABLE)
                 cur.execute(CREATE_TRACKED_BETS)
+                for stmt in MIGRATE_TRACKED_BETS:
+                    try:
+                        cur.execute(stmt)
+                    except Exception:
+                        pass  # column / constraint already exists
                 for _, row in df.iterrows():
                     cur.execute(UPSERT, {
                         'game_date':     date_str,
