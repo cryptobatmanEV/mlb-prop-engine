@@ -299,6 +299,8 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
   const [customOdds,      setCustomOdds]      = useState<Record<number, string>>({});
   const [evOnly,          setEvOnly]          = useState(false);
   const [expandedBatter,  setExpandedBatter]  = useState<number | null>(null);
+  const [searchQuery,     setSearchQuery]     = useState('');
+  const [viewMode,        setViewMode]        = useState<'edge' | 'game'>('edge');
 
   function handleSort(key: SortKey | null) {
     if (!key) return;
@@ -314,11 +316,40 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
     setExpandedBatter(prev => prev === batterId ? null : batterId);
   }
 
+  // Game labels built from all rows so filters don't break them
+  const gameLabels = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const row of rows) {
+      if (row.is_home === 'A') {
+        map.set(row.game_id, `${row.team_abbr} @ ${row.home_team}`);
+      } else if (!map.has(row.game_id) && row.home_team) {
+        map.set(row.game_id, `??? @ ${row.home_team}`);
+      }
+    }
+    return map;
+  }, [rows]);
+
+  const searchFiltered = useMemo(() => {
+    if (!searchQuery.trim()) return rows;
+    const q = searchQuery.trim().toLowerCase();
+    return rows.filter(r =>
+      r.player_name.toLowerCase().includes(q) ||
+      r.team_abbr.toLowerCase().includes(q)
+    );
+  }, [rows, searchQuery]);
+
+  const evCount = useMemo(
+    () => searchFiltered.filter(r => r.has_line && r.edge != null && r.edge > 0).length,
+    [searchFiltered]
+  );
+
+  const filtered = useMemo(() => {
+    if (!evOnly) return searchFiltered;
+    return searchFiltered.filter(r => r.has_line && r.edge != null && r.edge > 0);
+  }, [searchFiltered, evOnly]);
+
   const sorted = useMemo(() => {
-    const base = evOnly
-      ? rows.filter(r => r.has_line && r.edge != null && r.edge > 0)
-      : rows;
-    return [...base].sort((a, b) => {
+    return [...filtered].sort((a, b) => {
       const av = getSortVal(a, sortKey);
       const bv = getSortVal(b, sortKey);
       if (av == null && bv == null) return 0;
@@ -327,12 +358,62 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
       const cmp = av < bv ? -1 : av > bv ? 1 : 0;
       return sortDir === 'desc' ? -cmp : cmp;
     });
-  }, [rows, sortKey, sortDir, evOnly]);
+  }, [filtered, sortKey, sortDir]);
 
-  const evCount = rows.filter(r => r.has_line && r.edge != null && r.edge > 0).length;
+  const grouped = useMemo(() => {
+    const gameMap = new Map<number, Row[]>();
+    for (const row of filtered) {
+      if (!gameMap.has(row.game_id)) gameMap.set(row.game_id, []);
+      gameMap.get(row.game_id)!.push(row);
+    }
+    for (const gameRows of gameMap.values()) {
+      gameRows.sort((a, b) => b.adj_prob - a.adj_prob);
+    }
+    return Array.from(gameMap.values()).sort((a, b) => b[0].adj_prob - a[0].adj_prob);
+  }, [filtered]);
+
+  type TableItem =
+    | { type: 'row';    row: Row }
+    | { type: 'header'; label: string; count: number; gameId: number };
+
+  const tableItems = useMemo((): TableItem[] => {
+    if (viewMode === 'edge') return sorted.map(row => ({ type: 'row' as const, row }));
+    return grouped.flatMap(gameRows => [
+      {
+        type:   'header' as const,
+        label:  gameLabels.get(gameRows[0].game_id) ?? `GAME ${gameRows[0].game_id}`,
+        count:  gameRows.length,
+        gameId: gameRows[0].game_id,
+      },
+      ...gameRows.map(row => ({ type: 'row' as const, row })),
+    ]);
+  }, [viewMode, sorted, grouped, gameLabels]);
 
   return (
     <div>
+      {/* Search */}
+      <input
+        type="text"
+        placeholder="SEARCH PLAYER OR TEAM..."
+        value={searchQuery}
+        onChange={e => setSearchQuery(e.target.value)}
+        style={{
+          display:       'block',
+          width:         '100%',
+          boxSizing:     'border-box',
+          marginBottom:  '10px',
+          background:    'rgba(255,255,255,0.04)',
+          border:        '1px solid rgba(255,255,255,0.1)',
+          borderRadius:  '2px',
+          color:         'var(--ev-text)',
+          fontFamily:    'var(--font-mono)',
+          fontSize:      '11px',
+          letterSpacing: '1.5px',
+          padding:       '8px 12px',
+          outline:       'none',
+        }}
+      />
+
       {/* Filter toolbar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
         <button
@@ -352,6 +433,36 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
         >
           +EV ONLY
         </button>
+
+        {/* View mode toggle */}
+        <div style={{
+          display:      'flex',
+          border:       '1px solid rgba(255,255,255,0.12)',
+          borderRadius: '2px',
+          overflow:     'hidden',
+        }}>
+          {(['edge', 'game'] as const).map(mode => (
+            <button
+              key={mode}
+              onClick={() => setViewMode(mode)}
+              style={{
+                fontFamily:    'var(--font-mono)',
+                fontSize:      '10px',
+                letterSpacing: '2px',
+                textTransform: 'uppercase',
+                padding:       '5px 11px',
+                cursor:        'pointer',
+                border:        'none',
+                borderRight:   mode === 'edge' ? '1px solid rgba(255,255,255,0.12)' : 'none',
+                background:    viewMode === mode ? 'rgba(255,255,255,0.07)' : 'transparent',
+                color:         viewMode === mode ? 'var(--ev-text)' : 'var(--ev-dim)',
+              }}
+            >
+              {mode === 'edge' ? 'BY EDGE' : 'BY GAME'}
+            </button>
+          ))}
+        </div>
+
         <span style={{ ...LABEL, fontSize: '10px' }}>
           {evOnly
             ? `SHOWING ${evCount} +EV PLAY${evCount !== 1 ? 'S' : ''}`
@@ -404,7 +515,30 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
             </tr>
           </thead>
           <tbody>
-            {sorted.map((row, i) => {
+            {tableItems.map(item => {
+              if (item.type === 'header') {
+                return (
+                  <tr key={`hdr-${item.gameId}`}>
+                    <td colSpan={COLS.length} style={{
+                      padding:       '7px 16px',
+                      background:    'rgba(255,255,255,0.03)',
+                      borderTop:     '1px solid rgba(255,255,255,0.08)',
+                      borderBottom:  '1px solid rgba(255,255,255,0.05)',
+                      fontFamily:    'var(--font-mono)',
+                      fontSize:      '10px',
+                      letterSpacing: '2.5px',
+                      textTransform: 'uppercase',
+                      color:         'var(--ev-text)',
+                    }}>
+                      {item.label}
+                      <span style={{ color: 'var(--ev-dim)', marginLeft: '14px', letterSpacing: '1px', fontSize: '9px' }}>
+                        {item.count} STARTERS
+                      </span>
+                    </td>
+                  </tr>
+                );
+              }
+              const row = item.row;
               const isExpanded = expandedBatter === row.batter;
               const { text: edgeText, color: edgeColor, weight: edgeWeight } =
                 edgeDisplay(row.edge, row.has_line);
