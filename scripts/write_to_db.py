@@ -57,6 +57,15 @@ MIGRATE_HR_PREDICTIONS = [
     "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS bat_order INTEGER",
     "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS game_total FLOAT",
     "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS recent_hr INTEGER",
+    "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS barrel_pct_15 FLOAT",
+    "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS hardhit_pct_15 FLOAT",
+    "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS flyball_pct_15 FLOAT",
+    "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS avg_ev_15 FLOAT",
+    "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS xwoba_15 FLOAT",
+    "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS xslg_15 FLOAT",
+    "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS p_barrel_pct_allowed_10 FLOAT",
+    "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS p_hardhit_pct_allowed_10 FLOAT",
+    "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS p_hr_per_bb_allowed_10 FLOAT",
 ]
 
 CREATE_TABLE = """
@@ -90,6 +99,15 @@ CREATE TABLE IF NOT EXISTS hr_predictions (
     bat_order       INTEGER,
     game_total      FLOAT,
     recent_hr       INTEGER,
+    barrel_pct_15            FLOAT,
+    hardhit_pct_15           FLOAT,
+    flyball_pct_15           FLOAT,
+    avg_ev_15                FLOAT,
+    xwoba_15                 FLOAT,
+    xslg_15                  FLOAT,
+    p_barrel_pct_allowed_10  FLOAT,
+    p_hardhit_pct_allowed_10 FLOAT,
+    p_hr_per_bb_allowed_10   FLOAT,
     created_at      TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE (game_date, batter, game_id)
 );
@@ -101,7 +119,10 @@ INSERT INTO hr_predictions (
     player_name, team_abbr, stand, pitcher_name, p_throws, home_team, is_home, lineup_source,
     adj_prob, fair_odds, has_line, best_book, best_odds, book_implied, edge,
     model_prob, hr_park_factor, temp_f, wind_speed, wind_favor, is_dome,
-    season_hr, bat_order, game_total, recent_hr
+    season_hr, bat_order, game_total, recent_hr,
+    barrel_pct_15, hardhit_pct_15, flyball_pct_15,
+    avg_ev_15, xwoba_15, xslg_15,
+    p_barrel_pct_allowed_10, p_hardhit_pct_allowed_10, p_hr_per_bb_allowed_10
 ) VALUES (
     %(game_date)s, %(batter)s, %(game_id)s,
     %(player_name)s, %(team_abbr)s, %(stand)s, %(pitcher_name)s, %(p_throws)s,
@@ -109,30 +130,42 @@ INSERT INTO hr_predictions (
     %(adj_prob)s, %(fair_odds)s, %(has_line)s, %(best_book)s, %(best_odds)s,
     %(book_implied)s, %(edge)s,
     %(model_prob)s, %(hr_park_factor)s, %(temp_f)s, %(wind_speed)s, %(wind_favor)s, %(is_dome)s,
-    %(season_hr)s, %(bat_order)s, %(game_total)s, %(recent_hr)s
+    %(season_hr)s, %(bat_order)s, %(game_total)s, %(recent_hr)s,
+    %(barrel_pct_15)s, %(hardhit_pct_15)s, %(flyball_pct_15)s,
+    %(avg_ev_15)s, %(xwoba_15)s, %(xslg_15)s,
+    %(p_barrel_pct_allowed_10)s, %(p_hardhit_pct_allowed_10)s, %(p_hr_per_bb_allowed_10)s
 )
 ON CONFLICT (game_date, batter, game_id) DO UPDATE SET
-    player_name    = EXCLUDED.player_name,
-    is_home        = EXCLUDED.is_home,
-    lineup_source  = EXCLUDED.lineup_source,
-    adj_prob       = EXCLUDED.adj_prob,
-    fair_odds      = EXCLUDED.fair_odds,
-    has_line       = EXCLUDED.has_line,
-    best_book      = EXCLUDED.best_book,
-    best_odds      = EXCLUDED.best_odds,
-    book_implied   = EXCLUDED.book_implied,
-    edge           = EXCLUDED.edge,
-    model_prob     = EXCLUDED.model_prob,
-    hr_park_factor = EXCLUDED.hr_park_factor,
-    temp_f         = EXCLUDED.temp_f,
-    wind_speed     = EXCLUDED.wind_speed,
-    wind_favor     = EXCLUDED.wind_favor,
-    is_dome        = EXCLUDED.is_dome,
-    season_hr      = EXCLUDED.season_hr,
-    bat_order      = EXCLUDED.bat_order,
-    game_total     = EXCLUDED.game_total,
-    recent_hr      = EXCLUDED.recent_hr,
-    created_at     = NOW();
+    player_name              = EXCLUDED.player_name,
+    is_home                  = EXCLUDED.is_home,
+    lineup_source            = EXCLUDED.lineup_source,
+    adj_prob                 = EXCLUDED.adj_prob,
+    fair_odds                = EXCLUDED.fair_odds,
+    has_line                 = EXCLUDED.has_line,
+    best_book                = EXCLUDED.best_book,
+    best_odds                = EXCLUDED.best_odds,
+    book_implied             = EXCLUDED.book_implied,
+    edge                     = EXCLUDED.edge,
+    model_prob               = EXCLUDED.model_prob,
+    hr_park_factor           = EXCLUDED.hr_park_factor,
+    temp_f                   = EXCLUDED.temp_f,
+    wind_speed               = EXCLUDED.wind_speed,
+    wind_favor               = EXCLUDED.wind_favor,
+    is_dome                  = EXCLUDED.is_dome,
+    season_hr                = EXCLUDED.season_hr,
+    bat_order                = EXCLUDED.bat_order,
+    game_total               = EXCLUDED.game_total,
+    recent_hr                = EXCLUDED.recent_hr,
+    barrel_pct_15            = EXCLUDED.barrel_pct_15,
+    hardhit_pct_15           = EXCLUDED.hardhit_pct_15,
+    flyball_pct_15           = EXCLUDED.flyball_pct_15,
+    avg_ev_15                = EXCLUDED.avg_ev_15,
+    xwoba_15                 = EXCLUDED.xwoba_15,
+    xslg_15                  = EXCLUDED.xslg_15,
+    p_barrel_pct_allowed_10  = EXCLUDED.p_barrel_pct_allowed_10,
+    p_hardhit_pct_allowed_10 = EXCLUDED.p_hardhit_pct_allowed_10,
+    p_hr_per_bb_allowed_10   = EXCLUDED.p_hr_per_bb_allowed_10,
+    created_at               = NOW();
 """
 
 
@@ -226,6 +259,15 @@ def run(date_str=None):
                         'bat_order':     _int(row.get('bat_order')),
                         'game_total':    _clean(row.get('game_total')),
                         'recent_hr':     _int(row.get('recent_hr')),
+                        'barrel_pct_15':            _clean(row.get('barrel_pct_15')),
+                        'hardhit_pct_15':           _clean(row.get('hardhit_pct_15')),
+                        'flyball_pct_15':           _clean(row.get('flyball_pct_15')),
+                        'avg_ev_15':                _clean(row.get('avg_ev_15')),
+                        'xwoba_15':                 _clean(row.get('xwoba_15')),
+                        'xslg_15':                  _clean(row.get('xslg_15')),
+                        'p_barrel_pct_allowed_10':  _clean(row.get('p_barrel_pct_allowed_10')),
+                        'p_hardhit_pct_allowed_10': _clean(row.get('p_hardhit_pct_allowed_10')),
+                        'p_hr_per_bb_allowed_10':   _clean(row.get('p_hr_per_bb_allowed_10')),
                     })
         print(f"  Done -- {len(df)} rows upserted.")
     finally:

@@ -511,6 +511,10 @@ def run(date_str=None):
         'adj_prob',                     # <-- input to fair-odds conversion
         'hr_park_factor', 'temp_f', 'wind_speed', 'wind_favor', 'is_dome',
         'season_hr',
+        # Statcast rolling features used by model — also shown in web detail card
+        'barrel_pct_15', 'hardhit_pct_15', 'flyball_pct_15',
+        'avg_ev_15', 'xwoba_15', 'xslg_15',
+        'p_barrel_pct_allowed_10', 'p_hardhit_pct_allowed_10', 'p_hr_per_bb_allowed_10',
         'game_date', 'game_id', 'batter',
     ]
     pred_df[[c for c in out_cols if c in pred_df.columns]].to_csv(out_path, index=False)
