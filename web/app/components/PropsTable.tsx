@@ -40,6 +40,8 @@ export type Row = {
   p_barrel_pct_allowed_10: number | null;
   p_hardhit_pct_allowed_10: number | null;
   p_hr_per_bb_allowed_10: number | null;
+  hit_hr: boolean | null;
+  actual_hr_count: number | null;
 };
 
 type SortKey =
@@ -450,7 +452,21 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                         transform:   isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
                       }}>▶</span>
                       {row.player_name}
-                      {row.recent_hr === 1 && (
+                      {row.hit_hr === true && (
+                        <span style={{
+                          marginLeft:    '7px',
+                          fontSize:      '9px',
+                          letterSpacing: '1px',
+                          color:         '#0a0d0f',
+                          background:    'var(--ev-green)',
+                          borderRadius:  '2px',
+                          padding:       '1px 4px',
+                          fontWeight:    700,
+                        }}>
+                          HR
+                        </span>
+                      )}
+                      {row.recent_hr === 1 && row.hit_hr !== true && (
                         <span style={{
                           marginLeft:    '6px',
                           fontSize:      '9px',

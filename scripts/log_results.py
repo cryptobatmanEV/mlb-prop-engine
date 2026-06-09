@@ -199,6 +199,45 @@ def print_calibration_summary():
         print(f"\n  Need more positive-edge plays to evaluate (have {len(pos_edge)} so far).")
 
 
+def write_results_to_db(date_str, pred_df):
+    """
+    Write hit_hr and actual_hr_count back to hr_predictions in Neon so the
+    web app can show a green HR indicator on past-date cards.
+    Only rows with a known result (hit_hr >= 0) are updated.
+    """
+    import psycopg2
+    db_url = os.getenv('DATABASE_URL')
+    if not db_url:
+        return
+
+    known = pred_df[pred_df['hit_hr'] >= 0][['batter', 'hit_hr', 'actual_hr_count']].copy()
+    if known.empty:
+        return
+
+    try:
+        conn = psycopg2.connect(db_url)
+        try:
+            with conn:
+                with conn.cursor() as cur:
+                    for _, row in known.iterrows():
+                        cur.execute(
+                            """
+                            UPDATE hr_predictions
+                               SET hit_hr          = %s,
+                                   actual_hr_count = %s
+                             WHERE game_date = %s
+                               AND batter    = %s
+                            """,
+                            (bool(row['hit_hr']), int(row['actual_hr_count']),
+                             date_str, int(row['batter'])),
+                        )
+            print(f"  Wrote results to hr_predictions for {len(known)} player(s).")
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f"  WARNING: hr_predictions result write failed: {e}")
+
+
 def backfill_tracked_bets(date_str, pred_df):
     """
     After results are logged, update tracked_bets rows for this date
@@ -311,7 +350,8 @@ def run(date_str=None):
     total_rows = append_to_log(pred_df[save_cols])
     print(f"\n  Appended {len(pred_df)} rows to {LOG_PATH}  ({total_rows} total rows in log)")
 
-    # Backfill tracked_bets results
+    # Write results to Neon (hr_predictions + tracked_bets)
+    write_results_to_db(date_str, pred_df)
     backfill_tracked_bets(date_str, pred_df)
 
     # Running calibration summary

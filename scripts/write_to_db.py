@@ -66,6 +66,9 @@ MIGRATE_HR_PREDICTIONS = [
     "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS p_barrel_pct_allowed_10 FLOAT",
     "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS p_hardhit_pct_allowed_10 FLOAT",
     "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS p_hr_per_bb_allowed_10 FLOAT",
+    # Results columns — written by log_results.py, never overwritten by the pipeline upsert
+    "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS hit_hr BOOLEAN",
+    "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS actual_hr_count INTEGER",
 ]
 
 CREATE_TABLE = """
@@ -108,6 +111,8 @@ CREATE TABLE IF NOT EXISTS hr_predictions (
     p_barrel_pct_allowed_10  FLOAT,
     p_hardhit_pct_allowed_10 FLOAT,
     p_hr_per_bb_allowed_10   FLOAT,
+    hit_hr          BOOLEAN,
+    actual_hr_count INTEGER,
     created_at      TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE (game_date, batter, game_id)
 );
