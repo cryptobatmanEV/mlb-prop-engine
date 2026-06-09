@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, Fragment } from 'react';
 import TrackButton from './TrackButton';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -30,6 +30,16 @@ export type Row = {
   bat_order: number | null;
   game_total: number | null;
   recent_hr: number | null;
+  // Statcast rolling features for detail card
+  barrel_pct_15: number | null;
+  hardhit_pct_15: number | null;
+  flyball_pct_15: number | null;
+  avg_ev_15: number | null;
+  xwoba_15: number | null;
+  xslg_15: number | null;
+  p_barrel_pct_allowed_10: number | null;
+  p_hardhit_pct_allowed_10: number | null;
+  p_hr_per_bb_allowed_10: number | null;
 };
 
 type SortKey =
@@ -39,6 +49,150 @@ type SortKey =
   | 'bat_order' | 'season_hr' | 'game_total' | 'is_home';
 
 type SortDir = 'asc' | 'desc';
+
+// ── League averages + thresholds for detail card coloring ─────────────────
+
+type StatKey =
+  | 'barrel_pct_15' | 'hardhit_pct_15' | 'flyball_pct_15'
+  | 'avg_ev_15' | 'xwoba_15' | 'xslg_15'
+  | 'p_barrel_pct_allowed_10' | 'p_hardhit_pct_allowed_10' | 'p_hr_per_bb_allowed_10';
+
+const LEAGUE_AVG: Record<StatKey, number> = {
+  barrel_pct_15:            0.085,
+  hardhit_pct_15:           0.410,
+  flyball_pct_15:           0.350,
+  avg_ev_15:                88.5,
+  xwoba_15:                 0.320,
+  xslg_15:                  0.430,
+  p_barrel_pct_allowed_10:  0.085,
+  p_hardhit_pct_allowed_10: 0.410,
+  p_hr_per_bb_allowed_10:   0.075,
+};
+
+// Half-width of the "muted" neutral band around the average
+const BAND: Record<StatKey, number> = {
+  barrel_pct_15:            0.020,
+  hardhit_pct_15:           0.040,
+  flyball_pct_15:           0.040,
+  avg_ev_15:                2.0,
+  xwoba_15:                 0.025,
+  xslg_15:                  0.035,
+  p_barrel_pct_allowed_10:  0.020,
+  p_hardhit_pct_allowed_10: 0.040,
+  p_hr_per_bb_allowed_10:   0.020,
+};
+
+function statColor(key: StatKey, val: number | null): string {
+  if (val == null || isNaN(val)) return 'var(--ev-dim)';
+  const diff = val - LEAGUE_AVG[key];
+  if (Math.abs(diff) <= BAND[key]) return 'var(--ev-muted)';
+  return diff > 0 ? 'var(--ev-green)' : 'var(--ev-red)';
+}
+
+function fmtStat(key: StatKey, val: number | null): string {
+  if (val == null || isNaN(val as number)) return '—';
+  if (key === 'avg_ev_15') return val.toFixed(1);
+  if (key === 'xwoba_15' || key === 'xslg_15') {
+    const rounded = Math.round(val * 1000);
+    return '.' + String(rounded).padStart(3, '0');
+  }
+  return (val * 100).toFixed(1) + '%';
+}
+
+const BATTER_STATS: { key: StatKey; label: string }[] = [
+  { key: 'barrel_pct_15',  label: 'BARREL%'  },
+  { key: 'hardhit_pct_15', label: 'HARD HIT%' },
+  { key: 'flyball_pct_15', label: 'FLY BALL%' },
+  { key: 'avg_ev_15',      label: 'AVG EV'    },
+  { key: 'xwoba_15',       label: 'xwOBA'     },
+  { key: 'xslg_15',        label: 'xSLG'      },
+];
+
+const PITCHER_STATS: { key: StatKey; label: string }[] = [
+  { key: 'p_barrel_pct_allowed_10',  label: 'BARREL% ALLOWED'  },
+  { key: 'p_hardhit_pct_allowed_10', label: 'HARD HIT% ALLOWED' },
+  { key: 'p_hr_per_bb_allowed_10',   label: 'HR/BB ALLOWED'    },
+];
+
+// ── Detail card ────────────────────────────────────────────────────────────
+
+function DetailCard({ row }: { row: Row }) {
+  const SECTION_LABEL: React.CSSProperties = {
+    fontFamily:    'var(--font-mono)',
+    fontSize:      '9px',
+    letterSpacing: '2.5px',
+    textTransform: 'uppercase',
+    color:         'var(--ev-dim)',
+    marginBottom:  '10px',
+  };
+  const STAT_LABEL: React.CSSProperties = {
+    fontFamily:    'var(--font-mono)',
+    fontSize:      '9px',
+    letterSpacing: '1.5px',
+    textTransform: 'uppercase',
+    color:         'var(--ev-dim)',
+    marginBottom:  '4px',
+  };
+  const STAT_VAL: React.CSSProperties = {
+    fontFamily: 'var(--font-mono)',
+    fontSize:   '13px',
+    fontWeight: 500,
+  };
+
+  return (
+    <div style={{
+      padding:    '14px 16px 16px 16px',
+      background: 'rgba(255,255,255,0.015)',
+      borderTop:  '1px solid var(--ev-border)',
+    }}>
+      <div style={{ display: 'flex', gap: '40px', flexWrap: 'wrap' }}>
+
+        {/* Batter section */}
+        <div>
+          <div style={SECTION_LABEL}>BATTER L15</div>
+          <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+            {BATTER_STATS.map(({ key, label }) => {
+              const val = row[key as keyof Row] as number | null;
+              return (
+                <div key={key} style={{ minWidth: '56px' }}>
+                  <div style={STAT_LABEL}>{label}</div>
+                  <div style={{ ...STAT_VAL, color: statColor(key, val) }}>
+                    {fmtStat(key, val)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Divider */}
+        <div style={{
+          width: '1px', background: 'var(--ev-border)',
+          alignSelf: 'stretch', margin: '0 4px',
+        }} />
+
+        {/* Pitcher section */}
+        <div>
+          <div style={SECTION_LABEL}>PITCHER ALLOWED L10</div>
+          <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+            {PITCHER_STATS.map(({ key, label }) => {
+              const val = row[key as keyof Row] as number | null;
+              return (
+                <div key={key} style={{ minWidth: '56px' }}>
+                  <div style={STAT_LABEL}>{label}</div>
+                  <div style={{ ...STAT_VAL, color: statColor(key, val) }}>
+                    {fmtStat(key, val)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -111,7 +265,6 @@ const TH_BASE: React.CSSProperties = {
   whiteSpace: 'nowrap',
 };
 
-// Solid bg for sticky column cells (prevents content bleed-through when scrolling)
 const STICKY_BG = '#0a0d0f';
 
 // ── Column definitions ─────────────────────────────────────────────────────
@@ -139,10 +292,11 @@ const COLS: ColDef[] = [
 // ── Component ──────────────────────────────────────────────────────────────
 
 export default function PropsTable({ rows }: { rows: Row[] }) {
-  const [sortKey,    setSortKey]    = useState<SortKey>('adj_prob');
-  const [sortDir,    setSortDir]    = useState<SortDir>('desc');
-  const [customOdds, setCustomOdds] = useState<Record<number, string>>({});
-  const [evOnly,     setEvOnly]     = useState(false);
+  const [sortKey,         setSortKey]         = useState<SortKey>('adj_prob');
+  const [sortDir,         setSortDir]         = useState<SortDir>('desc');
+  const [customOdds,      setCustomOdds]      = useState<Record<number, string>>({});
+  const [evOnly,          setEvOnly]          = useState(false);
+  const [expandedBatter,  setExpandedBatter]  = useState<number | null>(null);
 
   function handleSort(key: SortKey | null) {
     if (!key) return;
@@ -152,6 +306,10 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
       setSortKey(key);
       setSortDir('desc');
     }
+  }
+
+  function toggleExpand(batterId: number) {
+    setExpandedBatter(prev => prev === batterId ? null : batterId);
   }
 
   const sorted = useMemo(() => {
@@ -245,6 +403,7 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
           </thead>
           <tbody>
             {sorted.map((row, i) => {
+              const isExpanded = expandedBatter === row.batter;
               const { text: edgeText, color: edgeColor, weight: edgeWeight } =
                 edgeDisplay(row.edge, row.has_line);
 
@@ -259,166 +418,199 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
               const trackedEdge = customNum != null ? myEdge : row.edge;
 
               return (
-                <tr key={row.id ?? i} className="pred-row" style={{ borderBottom: '1px solid var(--ev-border)' }}>
+                <Fragment key={`${row.game_id}-${row.batter}`}>
+                  <tr
+                    className="pred-row"
+                    onClick={() => toggleExpand(row.batter)}
+                    style={{
+                      borderBottom: isExpanded ? 'none' : '1px solid var(--ev-border)',
+                      cursor: 'pointer',
+                      background: isExpanded ? 'rgba(255,255,255,0.03)' : undefined,
+                    }}
+                  >
 
-                  {/* PLAYER — sticky */}
-                  <td style={{
-                    padding:     '9px 12px',
-                    color:       'var(--ev-text)',
-                    fontWeight:  500,
-                    position:    'sticky',
-                    left:        0,
-                    zIndex:      1,
-                    background:  STICKY_BG,
-                    borderRight: '1px solid var(--ev-border)',
-                    whiteSpace:  'nowrap',
-                  }}>
-                    {row.player_name}
-                    {row.recent_hr === 1 && (
+                    {/* PLAYER — sticky */}
+                    <td style={{
+                      padding:     '9px 12px',
+                      color:       'var(--ev-text)',
+                      fontWeight:  500,
+                      position:    'sticky',
+                      left:        0,
+                      zIndex:      1,
+                      background:  isExpanded ? 'rgba(20,24,28,1)' : STICKY_BG,
+                      borderRight: '1px solid var(--ev-border)',
+                      whiteSpace:  'nowrap',
+                    }}>
                       <span style={{
-                        marginLeft:    '6px',
-                        fontSize:      '9px',
-                        letterSpacing: '1px',
-                        color:         'var(--ev-gold)',
-                        fontWeight:    600,
-                      }}>
-                        HOT
-                      </span>
-                    )}
-                  </td>
-
-                  {/* BO */}
-                  <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ev-dim)', fontSize: '11px' }}>
-                    {row.bat_order ?? '—'}
-                  </td>
-
-                  {/* H/A */}
-                  <td style={{
-                    padding:   '9px 12px',
-                    textAlign: 'right',
-                    fontSize:  '11px',
-                    color:     row.is_home === 'H' ? 'var(--ev-green)' : 'var(--ev-muted)',
-                  }}>
-                    {row.is_home ?? '—'}
-                  </td>
-
-                  {/* TEAM */}
-                  <td style={{ padding: '9px 12px', color: 'var(--ev-muted)' }}>
-                    {row.team_abbr}
-                    {row.stand && (
-                      <span style={{ color: 'var(--ev-dim)', marginLeft: '5px', fontSize: '10px' }}>
-                        {row.stand}
-                      </span>
-                    )}
-                  </td>
-
-                  {/* VS */}
-                  <td style={{ padding: '9px 12px', color: 'var(--ev-dim)', fontSize: '11px' }}>
-                    {row.pitcher_name ?? 'TBD'}
-                    {row.p_throws && (
-                      <span style={{ color: 'rgba(255,255,255,0.2)', marginLeft: '3px' }}>
-                        ({row.p_throws})
-                      </span>
-                    )}
-                  </td>
-
-                  {/* ADJ% */}
-                  <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ev-text)', fontWeight: 500 }}>
-                    {fmtProb(row.adj_prob)}
-                  </td>
-
-                  {/* SZN HR */}
-                  <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ev-dim)', fontSize: '11px' }}>
-                    {row.season_hr ?? '—'}
-                  </td>
-
-                  {/* FAIR */}
-                  <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ev-dim)' }}>
-                    {fmtOdds(row.fair_odds)}
-                  </td>
-
-                  {/* BOOK */}
-                  <td style={{ padding: '9px 12px', textAlign: 'right' }}>
-                    {row.has_line ? (
-                      <>
-                        <span style={{ color: 'var(--ev-blue)' }}>{fmtOdds(row.best_odds)}</span>
-                        {row.best_book && (
-                          <span style={{ color: 'rgba(255,255,255,0.18)', fontSize: '10px', marginLeft: '5px' }}>
-                            {row.best_book}
-                          </span>
-                        )}
-                      </>
-                    ) : (
-                      <span style={{ color: 'var(--ev-dim)', fontSize: '10px' }}>—</span>
-                    )}
-                  </td>
-
-                  {/* MY LINE */}
-                  <td style={{ padding: '6px 10px', textAlign: 'right' }}>
-                    <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
-                      <input
-                        type="text"
-                        placeholder="+1000"
-                        value={rawInput}
-                        onChange={e => setCustomOdds(prev => ({ ...prev, [row.batter]: e.target.value }))}
-                        style={{
-                          width:        '72px',
-                          background:   'rgba(255,255,255,0.04)',
-                          border:       `1px solid ${customNum != null ? 'rgba(255,200,0,0.4)' : 'rgba(255,255,255,0.08)'}`,
-                          borderRadius: '2px',
-                          color:        customNum != null ? 'var(--ev-gold)' : 'rgba(255,255,255,0.25)',
-                          fontFamily:   'var(--font-mono)',
-                          fontSize:     '11px',
-                          padding:      '3px 7px',
-                          textAlign:    'right',
-                          outline:      'none',
-                        }}
-                      />
-                      {customNum != null && (
+                        display:     'inline-block',
+                        marginRight: '6px',
+                        fontSize:    '9px',
+                        color:       isExpanded ? 'var(--ev-green)' : 'var(--ev-dim)',
+                        transition:  'transform 0.15s',
+                        transform:   isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                      }}>▶</span>
+                      {row.player_name}
+                      {row.recent_hr === 1 && (
                         <span style={{
-                          fontSize: '10px', letterSpacing: '1px',
-                          color: myEdgeDisp.color, fontWeight: myEdgeDisp.weight,
+                          marginLeft:    '6px',
+                          fontSize:      '9px',
+                          letterSpacing: '1px',
+                          color:         'var(--ev-gold)',
+                          fontWeight:    600,
                         }}>
-                          {myEdgeDisp.text} EV
+                          HOT
                         </span>
                       )}
-                    </div>
-                  </td>
+                    </td>
 
-                  {/* EDGE */}
-                  <td style={{ padding: '9px 12px', textAlign: 'right', color: edgeColor, fontWeight: edgeWeight }}>
-                    {edgeText}
-                  </td>
+                    {/* BO */}
+                    <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ev-dim)', fontSize: '11px' }}>
+                      {row.bat_order ?? '—'}
+                    </td>
 
-                  {/* O/U */}
-                  <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ev-dim)', fontSize: '11px' }}>
-                    {row.game_total != null ? row.game_total : '—'}
-                  </td>
+                    {/* H/A */}
+                    <td style={{
+                      padding:   '9px 12px',
+                      textAlign: 'right',
+                      fontSize:  '11px',
+                      color:     row.is_home === 'H' ? 'var(--ev-green)' : 'var(--ev-muted)',
+                    }}>
+                      {row.is_home ?? '—'}
+                    </td>
 
-                  {/* PARK */}
-                  <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ev-dim)', fontSize: '11px' }}>
-                    {row.hr_park_factor != null ? Math.round(row.hr_park_factor) : '—'}
-                  </td>
+                    {/* TEAM */}
+                    <td style={{ padding: '9px 12px', color: 'var(--ev-muted)' }}>
+                      {row.team_abbr}
+                      {row.stand && (
+                        <span style={{ color: 'var(--ev-dim)', marginLeft: '5px', fontSize: '10px' }}>
+                          {row.stand}
+                        </span>
+                      )}
+                    </td>
 
-                  {/* WIND */}
-                  <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ev-dim)', fontSize: '11px' }}>
-                    {fmtWind(row.wind_favor, row.is_dome)}
-                  </td>
+                    {/* VS */}
+                    <td style={{ padding: '9px 12px', color: 'var(--ev-dim)', fontSize: '11px' }}>
+                      {row.pitcher_name ?? 'TBD'}
+                      {row.p_throws && (
+                        <span style={{ color: 'rgba(255,255,255,0.2)', marginLeft: '3px' }}>
+                          ({row.p_throws})
+                        </span>
+                      )}
+                    </td>
 
-                  {/* TRACK */}
-                  <td style={{ padding: '6px 14px', textAlign: 'right' }}>
-                    <TrackButton
-                      gameDate={String(row.game_date).slice(0, 10)}
-                      batter={row.batter}
-                      playerName={row.player_name}
-                      teamAbbr={row.team_abbr}
-                      adjProb={row.adj_prob}
-                      trackedOdds={trackedOdds}
-                      trackedEdge={trackedEdge}
-                    />
-                  </td>
+                    {/* ADJ% */}
+                    <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ev-text)', fontWeight: 500 }}>
+                      {fmtProb(row.adj_prob)}
+                    </td>
 
-                </tr>
+                    {/* SZN HR */}
+                    <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ev-dim)', fontSize: '11px' }}>
+                      {row.season_hr ?? '—'}
+                    </td>
+
+                    {/* FAIR */}
+                    <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ev-dim)' }}>
+                      {fmtOdds(row.fair_odds)}
+                    </td>
+
+                    {/* BOOK */}
+                    <td style={{ padding: '9px 12px', textAlign: 'right' }}>
+                      {row.has_line ? (
+                        <>
+                          <span style={{ color: 'var(--ev-blue)' }}>{fmtOdds(row.best_odds)}</span>
+                          {row.best_book && (
+                            <span style={{ color: 'rgba(255,255,255,0.18)', fontSize: '10px', marginLeft: '5px' }}>
+                              {row.best_book}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span style={{ color: 'var(--ev-dim)', fontSize: '10px' }}>—</span>
+                      )}
+                    </td>
+
+                    {/* MY LINE */}
+                    <td
+                      style={{ padding: '6px 10px', textAlign: 'right' }}
+                      onClick={e => e.stopPropagation()}
+                    >
+                      <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
+                        <input
+                          type="text"
+                          placeholder="+1000"
+                          value={rawInput}
+                          onChange={e => setCustomOdds(prev => ({ ...prev, [row.batter]: e.target.value }))}
+                          style={{
+                            width:        '72px',
+                            background:   'rgba(255,255,255,0.04)',
+                            border:       `1px solid ${customNum != null ? 'rgba(255,200,0,0.4)' : 'rgba(255,255,255,0.08)'}`,
+                            borderRadius: '2px',
+                            color:        customNum != null ? 'var(--ev-gold)' : 'rgba(255,255,255,0.25)',
+                            fontFamily:   'var(--font-mono)',
+                            fontSize:     '11px',
+                            padding:      '3px 7px',
+                            textAlign:    'right',
+                            outline:      'none',
+                          }}
+                        />
+                        {customNum != null && (
+                          <span style={{
+                            fontSize: '10px', letterSpacing: '1px',
+                            color: myEdgeDisp.color, fontWeight: myEdgeDisp.weight,
+                          }}>
+                            {myEdgeDisp.text} EV
+                          </span>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* EDGE */}
+                    <td style={{ padding: '9px 12px', textAlign: 'right', color: edgeColor, fontWeight: edgeWeight }}>
+                      {edgeText}
+                    </td>
+
+                    {/* O/U */}
+                    <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ev-dim)', fontSize: '11px' }}>
+                      {row.game_total != null ? row.game_total : '—'}
+                    </td>
+
+                    {/* PARK */}
+                    <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ev-dim)', fontSize: '11px' }}>
+                      {row.hr_park_factor != null ? Math.round(row.hr_park_factor) : '—'}
+                    </td>
+
+                    {/* WIND */}
+                    <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ev-dim)', fontSize: '11px' }}>
+                      {fmtWind(row.wind_favor, row.is_dome)}
+                    </td>
+
+                    {/* TRACK */}
+                    <td
+                      style={{ padding: '6px 14px', textAlign: 'right' }}
+                      onClick={e => e.stopPropagation()}
+                    >
+                      <TrackButton
+                        gameDate={String(row.game_date).slice(0, 10)}
+                        batter={row.batter}
+                        playerName={row.player_name}
+                        teamAbbr={row.team_abbr}
+                        adjProb={row.adj_prob}
+                        trackedOdds={trackedOdds}
+                        trackedEdge={trackedEdge}
+                      />
+                    </td>
+
+                  </tr>
+
+                  {/* Expanded detail row */}
+                  {isExpanded && (
+                    <tr style={{ borderBottom: '1px solid var(--ev-border)' }}>
+                      <td colSpan={COLS.length} style={{ padding: 0 }}>
+                        <DetailCard row={row} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               );
             })}
           </tbody>
