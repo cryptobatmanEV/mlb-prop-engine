@@ -1,0 +1,62 @@
+name: Daily Pipeline
+
+# Runs twice per day during baseball season:
+#   11 AM EDT (15:00 UTC) — early run after overnight lineups post
+#    4 PM EDT (20:00 UTC) — afternoon run after game-day lineups are confirmed
+# Both times assume EDT (UTC-4, April-October). No adjustment needed in off-season.
+
+on:
+  schedule:
+    - cron: '0 15 * * *'   # 11:00 AM EDT
+    - cron: '0 20 * * *'   #  4:00 PM EDT
+  workflow_dispatch:         # manual trigger from the Actions tab
+
+permissions:
+  contents: write   # needed to commit outputs back to the repo
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # Log yesterday's actual HR results into Neon.
+      # Reads yesterday's fair_odds CSV (committed by the previous pipeline run).
+      # Uses continue-on-error so a missing CSV on the very first run doesn't block predictions.
+      - name: Log yesterday's results
+        continue-on-error: true
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+        run: python scripts/log_results.py
+
+      # Generate today's predictions and write to Neon (powers the web app).
+      - name: Generate today's predictions
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+        run: python scripts/daily_pipeline.py
+
+      # Commit the new fair_odds CSV and any results_log updates back to the repo.
+      # This is what makes tomorrow's log_results step able to read today's CSV.
+      - name: Commit pipeline outputs
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/outputs/ data/logs/ 2>/dev/null || true
+          git diff --cached --quiet && echo "Nothing to commit" && exit 0
+          git commit -m "Auto: pipeline $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git push

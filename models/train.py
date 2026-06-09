@@ -14,19 +14,16 @@ FEATURES = [
     'p_barrel_pct_allowed_10','p_hardhit_pct_allowed_10','p_flyball_pct_allowed_10','p_hr_per_bb_allowed_10','p_avg_ev_allowed_10','p_xslg_allowed_10',
     'p_barrel_pct_allowed_20','p_hardhit_pct_allowed_20','p_flyball_pct_allowed_20','p_hr_per_bb_allowed_20','p_avg_ev_allowed_20','p_xslg_allowed_20',
     'hr_park_factor',
-    # weather
     'temp_f', 'wind_speed', 'wind_favor', 'is_dome',
-    # handedness flags (1=right, 0=left) — lets model learn platoon effects
     'stand_R', 'p_throws_R',
-    # platoon splits: rolling HR/barrel/hardhit rates split by pitcher hand
-    # vs_R cols are populated for games vs RHP; vs_L for games vs LHP; others NaN
-    # LightGBM handles NaN natively — routes NaN rows down a separate branch
     'hr_per_bb_vs_R_15', 'barrel_pct_vs_R_15', 'hardhit_pct_vs_R_15',
     'hr_per_bb_vs_R_30', 'barrel_pct_vs_R_30', 'hardhit_pct_vs_R_30',
     'hr_per_bb_vs_L_15', 'barrel_pct_vs_L_15', 'hardhit_pct_vs_L_15',
     'hr_per_bb_vs_L_30', 'barrel_pct_vs_L_30', 'hardhit_pct_vs_L_30',
-    # bat_order will be added here once statcast parquet is refreshed
-    # (add 'bat_order' to KEEP_COLS in ingestion/fetch_statcast.py and re-pull)
+    # New features v2
+    'season_hr',     # batter's cumulative HRs this season before this game
+    'days_since_hr', # days since batter's most recent HR (NaN if none in history)
+    'p_fip',         # pitcher's FIP from prior season (NaN for rookies/short samples)
 ]
 
 def train():
@@ -92,7 +89,8 @@ def train():
     print(cal.to_string())
 
     os.makedirs('models/saved', exist_ok=True)
-    joblib.dump(model, 'models/saved/hr_model.pkl')
-    print("\nSaved model to models/saved/hr_model.pkl")
+    joblib.dump(model, 'models/saved/hr_model_v2.pkl')
+    print("\nSaved model to models/saved/hr_model_v2.pkl")
+    print("(hr_model.pkl unchanged — run pipeline with v2 once you approve the numbers)")
 
 train()

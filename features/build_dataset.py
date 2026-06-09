@@ -7,6 +7,7 @@ PITCHER = 'data/processed/pitcher_features.parquet'
 PARK    = 'data/processed/park_factors.csv'
 WEATHER = 'data/processed/weather.parquet'
 PLATOON = 'data/processed/platoon_features.parquet'
+FIP     = 'data/processed/pitcher_fip.parquet'
 OUT     = 'data/processed/training_dataset.parquet'
 
 def build():
@@ -15,6 +16,24 @@ def build():
     store['game_date'] = pd.to_datetime(store['game_date'])
     batter = pd.read_parquet(BATTER)
     pitcher = pd.read_parquet(PITCHER)
+
+    # ── New batter features ───────────────────────────────────────────────────
+    print("Computing season_hr and days_since_hr...")
+    batter['game_date'] = pd.to_datetime(batter['game_date'])
+    batter = batter.sort_values(['batter', 'game_date'])
+
+    # season_hr: cumulative HRs BEFORE this game (same calendar year)
+    batter['_year'] = batter['game_date'].dt.year
+    batter['season_hr'] = (batter.groupby(['batter', '_year'])['hr'].cumsum()
+                           - batter['hr'])
+
+    # days_since_hr: days since the most recent prior game where batter hit an HR
+    batter['_hr_date'] = batter['game_date'].where(batter['hr'] > 0)
+    batter['_prev_hr_date'] = (batter.groupby('batter')['_hr_date']
+                                .transform(lambda s: s.shift(1).ffill()))
+    batter['days_since_hr'] = (batter['game_date'] - batter['_prev_hr_date']).dt.days
+    batter = batter.drop(columns=['_year', '_hr_date', '_prev_hr_date'])
+
     park = pd.read_csv(PARK)
 
     print("Finding primary opposing pitcher per batter-game...")
@@ -34,6 +53,23 @@ def build():
     print("Joining opposing pitcher features...")
     pcols = ['pitcher','game_pk'] + [c for c in pitcher.columns if c.startswith('p_')]
     df = df.merge(pitcher[pcols], on=['pitcher','game_pk'], how='left')
+
+    print("Joining pitcher FIP (previous year, to avoid look-ahead bias)...")
+    if os.path.exists(FIP):
+        fip_df = pd.read_parquet(FIP)
+        # Use prior year's FIP: FIP from season Y is used for games in year Y+1
+        fip_df = fip_df[['pitcher', 'season', 'p_fip']].copy()
+        fip_df['game_year'] = fip_df['season'] + 1
+        df['game_year'] = df['game_date'].dt.year
+        df = df.merge(fip_df[['pitcher', 'game_year', 'p_fip']],
+                      on=['pitcher', 'game_year'], how='left')
+        df = df.drop(columns=['game_year'])
+        pct = df['p_fip'].notna().mean()
+        print(f"  p_fip filled: {df['p_fip'].notna().sum():,} / {len(df):,} rows ({pct:.1%})")
+    else:
+        print("  WARNING: pitcher_fip.parquet not found — skipping p_fip.")
+        print("  Run first: python ingestion/fetch_pitcher_fip.py")
+        df['p_fip'] = float('nan')
 
     print("Joining park factors (handedness-split)...")
     park_split = park[park['bat_side'] != 'ALL'][['park','bat_side','hr_park_factor']]

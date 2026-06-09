@@ -43,6 +43,7 @@ PITCHER_PATH = 'data/processed/pitcher_features.parquet'
 PLATOON_PATH = 'data/processed/platoon_features.parquet'
 PARK_PATH    = 'data/processed/park_factors.csv'
 WEATHER_PATH = 'data/processed/weather.parquet'
+FIP_PATH     = 'data/processed/pitcher_fip.parquet'
 OUT_DIR      = 'data/predictions'
 
 # Must stay in sync with models/train.py FEATURES list
@@ -60,6 +61,10 @@ FEATURES = [
     'hr_per_bb_vs_R_30', 'barrel_pct_vs_R_30', 'hardhit_pct_vs_R_30',
     'hr_per_bb_vs_L_15', 'barrel_pct_vs_L_15', 'hardhit_pct_vs_L_15',
     'hr_per_bb_vs_L_30', 'barrel_pct_vs_L_30', 'hardhit_pct_vs_L_30',
+    # New features v2
+    'season_hr',
+    'days_since_hr',
+    'p_fip',
 ]
 
 # Expected PA by batting order position (used in contact adjustment).
@@ -184,17 +189,40 @@ def fetch_contact_rates(season):
 # ── Load latest features from parquets ───────────────────────────────────────
 
 def load_latest_batter_features():
-    """One row per batter — their most recent game's rolling features."""
+    """
+    One row per batter — their most recent game's rolling features.
+    Also includes last_hr_date (most recent game they hit a HR), used to
+    compute days_since_hr at prediction time relative to the actual game date.
+    """
     df = pd.read_parquet(BATTER_PATH)
     df['game_date'] = pd.to_datetime(df['game_date'])
-    return df.sort_values('game_date').groupby('batter').last().reset_index()
+    df_sorted = df.sort_values(['batter', 'game_date'])
+
+    # Most recent game date where batter hit at least one HR
+    hr_games = df_sorted[df_sorted['hr'] > 0][['batter', 'game_date']]
+    last_hr = (hr_games.groupby('batter')['game_date'].max()
+               .reset_index()
+               .rename(columns={'game_date': 'last_hr_date'}))
+
+    latest = df_sorted.groupby('batter').last().reset_index()
+    return latest.merge(last_hr, on='batter', how='left')
 
 
-def load_latest_pitcher_features():
-    """One row per pitcher — most recent game's rolling features + p_throws."""
+def load_latest_pitcher_features(season_year=None):
+    """
+    One row per pitcher — most recent game's rolling features + p_throws.
+    If season_year is given, joins current-season FIP from pitcher_fip.parquet.
+    """
     df = pd.read_parquet(PITCHER_PATH)
     df['game_date'] = pd.to_datetime(df['game_date'])
-    return df.sort_values('game_date').groupby('pitcher').last().reset_index()
+    latest = df.sort_values('game_date').groupby('pitcher').last().reset_index()
+
+    if season_year is not None and os.path.exists(FIP_PATH):
+        fip = pd.read_parquet(FIP_PATH)
+        curr_fip = fip[fip['season'] == season_year][['pitcher', 'p_fip']]
+        latest = latest.merge(curr_fip, on='pitcher', how='left')
+
+    return latest
 
 
 def load_latest_platoon_features():
@@ -383,12 +411,12 @@ def add_contact_adjustment(df, contact_df):
     Using adj_prob instead of model_prob prevents every line from
     appearing to have false value when converting to fair odds.
     """
-    # Join this season's per-player K% and BB%
+    # Join this season's per-player K% and BB% only (season_hr is already in df
+    # from batter_feats enrichment done before scoring, so we don't re-merge it)
     if not contact_df.empty:
-        df = df.merge(
-            contact_df.rename(columns={'player_id': 'batter'}),
-            on='batter', how='left'
-        )
+        rate_cols = contact_df[['player_id', 'k_pct', 'bb_pct']].rename(
+            columns={'player_id': 'batter'})
+        df = df.merge(rate_cols, on='batter', how='left')
     else:
         df['k_pct']  = np.nan
         df['bb_pct'] = np.nan
@@ -437,7 +465,7 @@ def run(date_str=None):
     weather_idx = get_todays_weather(date_str)
 
     batter_feats  = load_latest_batter_features()
-    pitcher_feats = load_latest_pitcher_features()
+    pitcher_feats = load_latest_pitcher_features(season_year=season)
     platoon_feats = load_latest_platoon_features()
     print(f"  {batter_feats['batter'].nunique():,} batters  |  "
           f"{pitcher_feats['pitcher'].nunique():,} pitchers  with history")
@@ -472,6 +500,19 @@ def run(date_str=None):
     # ── Contact rates ─────────────────────────────────────────────────────────
     print(f"\nFetching {season} contact rates (K%/BB%) from MLB Stats API...")
     contact_df = fetch_contact_rates(season)
+
+    # Enrich batter_feats with season_hr and days_since_hr BEFORE model scoring.
+    # season_hr comes from the MLB Stats API hit count (already fetched above).
+    # days_since_hr is relative to today's prediction date.
+    if not contact_df.empty and 'season_hr' in contact_df.columns:
+        hr_map = contact_df.set_index('player_id')['season_hr']
+        batter_feats['season_hr'] = batter_feats['batter'].map(hr_map)
+    else:
+        batter_feats['season_hr'] = np.nan
+
+    batter_feats['days_since_hr'] = (
+        pd.Timestamp(date_str) - batter_feats['last_hr_date']
+    ).dt.days
 
     # ── Build + score ─────────────────────────────────────────────────────────
     print("\nAssembling prediction rows...")
