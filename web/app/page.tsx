@@ -1,5 +1,6 @@
 import { getDb } from '@/lib/db';
 import PropsTable, { Row } from './components/PropsTable';
+import DateNav from './components/DateNav';
 
 export const dynamic = 'force-dynamic';
 
@@ -82,20 +83,31 @@ const TH: React.CSSProperties = {
 
 // ── Page ───────────────────────────────────────────────────────────────────
 
-export default async function Home() {
-  // Date + time context (ET)
-  const now = new Date();
-  const today = now.toLocaleDateString('en-US', {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ date?: string }>;
+}) {
+  const params = await searchParams;
+
+  // Date context (ET)
+  const now      = new Date();
+  const todayISO = now.toLocaleDateString('en-CA', { timeZone: 'America/New_York' }); // YYYY-MM-DD
+  const dateStr  = params.date ?? todayISO;
+
+  // Validate format — fall back to today on garbage input
+  const validDate = /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? dateStr : todayISO;
+
+  const displayDate = new Date(validDate + 'T12:00:00Z').toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
-    timeZone: 'America/New_York',
+    timeZone: 'UTC',
   }).toUpperCase();
 
+  const isViewingToday = validDate === todayISO;
   const etHourStr = now.toLocaleString('en-US', {
-    timeZone: 'America/New_York',
-    hour:     'numeric',
-    hour12:   false,
+    timeZone: 'America/New_York', hour: 'numeric', hour12: false,
   });
-  const isBeforeLineups = parseInt(etHourStr, 10) < 15; // before 3 PM ET
+  const isBeforeLineups = isViewingToday && parseInt(etHourStr, 10) < 15;
 
   let rows:        Row[]              = [];
   let dbError:     string | null      = null;
@@ -108,7 +120,7 @@ export default async function Home() {
     const sql = getDb();
     rows = (await sql`
       SELECT * FROM hr_predictions
-      WHERE game_date = CURRENT_DATE
+      WHERE game_date = ${validDate}::date
       ORDER BY adj_prob DESC
     `) as Row[];
 
@@ -116,7 +128,7 @@ export default async function Home() {
     const lu = await sql`
       SELECT MAX(created_at) AS ts
       FROM hr_predictions
-      WHERE game_date = CURRENT_DATE
+      WHERE game_date = ${validDate}::date
     `;
     if (lu[0]?.ts) {
       lastUpdated = new Date(lu[0].ts as string).toLocaleTimeString('en-US', {
@@ -180,7 +192,7 @@ export default async function Home() {
           </h1>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '16px', marginTop: '6px', flexWrap: 'wrap' }}>
             <div style={{ ...LABEL, color: 'var(--ev-muted)', letterSpacing: '1px' }}>
-              {today}
+              {displayDate}
             </div>
             {lastUpdated && (
               <div style={{ ...LABEL, color: 'var(--ev-dim)', letterSpacing: '1px' }}>
@@ -194,6 +206,9 @@ export default async function Home() {
             </div>
           )}
         </header>
+
+        {/* Date navigation */}
+        <DateNav date={validDate} today={todayISO} />
 
         {/* Predictions table */}
         {dbError ? (
