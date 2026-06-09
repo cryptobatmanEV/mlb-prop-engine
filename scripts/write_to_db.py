@@ -226,9 +226,11 @@ def run(date_str=None):
                 cur.execute(CREATE_TRACKED_BETS)
                 for stmt in MIGRATE_HR_PREDICTIONS + MIGRATE_TRACKED_BETS:
                     try:
+                        cur.execute("SAVEPOINT mig")
                         cur.execute(stmt)
+                        cur.execute("RELEASE SAVEPOINT mig")
                     except Exception:
-                        pass  # column / constraint already exists
+                        cur.execute("ROLLBACK TO SAVEPOINT mig")  # keep outer tx alive
                 for _, row in df.iterrows():
                     cur.execute(UPSERT, {
                         'game_date':     date_str,

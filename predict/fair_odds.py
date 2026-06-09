@@ -714,7 +714,30 @@ def run(date_str=None):
         if existing_df.empty:
             print("\n  No games ready to price yet. Re-run after lineups are posted.")
         else:
-            print("\n  No new games to price this run -- existing output is up to date.")
+            # Merge any pass-through columns that were added to predictions since last run
+            passthrough = [
+                c for c in pred_df.columns
+                if c not in existing_df.columns
+                and c not in ('game_date', 'player_name', 'team_abbr', 'stand',
+                              'pitcher_name', 'p_throws', 'home_team', 'lineup_source')
+            ]
+            if passthrough:
+                merge_src = pred_df[['game_id', 'batter'] + passthrough].drop_duplicates(['game_id', 'batter'])
+                existing_df = existing_df.merge(merge_src, on=['game_id', 'batter'], how='left')
+                # bat_order from already-fetched lineups
+                if 'bat_order' not in existing_df.columns:
+                    combined_bo = {}
+                    for info in lineups_by_game.values():
+                        combined_bo.update(info.get('batting_order', {}))
+                    existing_df['bat_order'] = existing_df['batter'].map(combined_bo)
+                # recent_hr from batter_features
+                if 'recent_hr' not in existing_df.columns:
+                    hot = fetch_recent_hr_batters(date_str, set(existing_df['batter']))
+                    existing_df['recent_hr'] = existing_df['batter'].isin(hot).astype(int)
+                print(f"\n  Enriched existing output with {len(passthrough)} new column(s).")
+                save_output(existing_df, date_str)
+            else:
+                print("\n  No new games to price this run -- existing output is up to date.")
         print_run_summary(schedule_games, lineups_by_game, already_priced_pks,
                           new_games, credits_events, credits_props, failed_count,
                           credits_remaining, len(already_priced_pks))
