@@ -15,7 +15,8 @@ export async function POST(req: NextRequest) {
 
     const sql = getDb();
 
-    // Create table with correct schema (new installs)
+    // Safety net: create table if the pipeline hasn't run yet on this environment.
+    // On normal usage the Python pipeline creates this table; this is a fallback.
     await sql`
       CREATE TABLE IF NOT EXISTS tracked_bets (
         id           SERIAL PRIMARY KEY,
@@ -34,28 +35,6 @@ export async function POST(req: NextRequest) {
       )
     `;
 
-    // Migrations for tables created before this schema
-    // Rename best_odds → tracked_odds if old column exists
-    try {
-      await sql`ALTER TABLE tracked_bets RENAME COLUMN best_odds TO tracked_odds`;
-    } catch { /* best_odds doesn't exist or already renamed */ }
-
-    // Add tracked_odds if neither column was present (very old tables)
-    try {
-      await sql`ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS tracked_odds INTEGER`;
-    } catch { /* already exists */ }
-
-    // Add settled if old table is missing it
-    try {
-      await sql`ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS settled BOOLEAN NOT NULL DEFAULT false`;
-    } catch { /* already exists */ }
-
-    // Add unique constraint if missing
-    try {
-      await sql`ALTER TABLE tracked_bets ADD CONSTRAINT tracked_bets_date_batter_key UNIQUE (game_date, batter)`;
-    } catch { /* already exists or duplicates prevent it */ }
-
-    // Upsert: re-tracking resets the bet to pending with new details
     const result = await sql`
       INSERT INTO tracked_bets
         (game_date, batter, player_name, team_abbr, adj_prob, tracked_odds, edge, stake_units, settled)
@@ -76,7 +55,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, id: result[0].id });
   } catch (err) {
-    console.error('track error:', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    // Surface the real error message so browser console shows the actual cause
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[/api/track] POST error:', msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
