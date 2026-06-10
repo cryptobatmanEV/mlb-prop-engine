@@ -103,11 +103,27 @@ def _mlb(path, params, timeout=20):
 
 # ── Schedule ──────────────────────────────────────────────────────────────────
 
+def format_game_time_et(iso_str):
+    """Convert an MLB Stats API UTC timestamp ('2026-06-07T23:10:00Z') to '7:10 PM ET'."""
+    if not iso_str:
+        return None
+    try:
+        ts = pd.Timestamp(iso_str).tz_convert('America/New_York')
+        hour = ts.hour % 12
+        if hour == 0:
+            hour = 12
+        period = 'AM' if ts.hour < 12 else 'PM'
+        return f"{hour}:{ts.minute:02d} {period} ET"
+    except (ValueError, TypeError):
+        return None
+
+
 def fetch_schedule(date_str):
     """
     Returns a list of today's regular-season game dicts:
       game_id, status, home_id, away_id, home_abbr, away_abbr,
-      home_pitcher_id, home_pitcher_name, away_pitcher_id, away_pitcher_name
+      home_pitcher_id, home_pitcher_name, away_pitcher_id, away_pitcher_name,
+      game_time, stadium
     """
     data = _mlb('schedule', {
         'sportId': 1, 'date': date_str,
@@ -118,17 +134,20 @@ def fetch_schedule(date_str):
         for g in date_block.get('games', []):
             home = g['teams']['home']
             away = g['teams']['away']
+            home_abbr = home['team'].get('abbreviation', '')
             games.append({
                 'game_id':           g['gamePk'],
                 'status':            g['status']['abstractGameState'],
                 'home_id':           home['team']['id'],
                 'away_id':           away['team']['id'],
-                'home_abbr':         home['team'].get('abbreviation', ''),
+                'home_abbr':         home_abbr,
                 'away_abbr':         away['team'].get('abbreviation', ''),
                 'home_pitcher_id':   home.get('probablePitcher', {}).get('id'),
                 'home_pitcher_name': home.get('probablePitcher', {}).get('fullName', 'TBD'),
                 'away_pitcher_id':   away.get('probablePitcher', {}).get('id'),
                 'away_pitcher_name': away.get('probablePitcher', {}).get('fullName', 'TBD'),
+                'game_time':         format_game_time_et(g.get('gameDate')),
+                'stadium':           STADIUMS.get(home_abbr, {}).get('name'),
             })
     return games
 
@@ -369,6 +388,27 @@ def load_latest_platoon_features():
 
 # ── Weather ───────────────────────────────────────────────────────────────────
 
+def wind_description(wind_speed, wind_favor, is_dome):
+    """
+    Human-readable wind summary for the web detail card, e.g.
+    '8 MPH TOWARD HP', '5 MPH TOWARD OF', 'CROSSWIND 3 MPH', 'DOME', 'CALM'.
+    """
+    if is_dome:
+        return 'DOME'
+    if pd.isna(wind_speed) or wind_speed < 1:
+        return 'CALM'
+    if pd.isna(wind_favor):
+        return f'{round(wind_speed)} MPH'
+
+    ratio = wind_favor / wind_speed
+    ratio = max(-1.0, min(1.0, ratio))
+    if ratio >= 0.3:
+        return f'{round(wind_favor)} MPH TOWARD OF'
+    elif ratio <= -0.3:
+        return f'{round(abs(wind_favor))} MPH TOWARD HP'
+    return f'CROSSWIND {round(wind_speed)} MPH'
+
+
 def get_todays_weather(date_str):
     """
     Returns a DataFrame of weather keyed by home_team for date_str.
@@ -428,9 +468,13 @@ def build_prediction_df(date_str, games, rosters,
                 float(w.get('wind_favor', np.nan)),
                 int(w.get('is_dome', 0)),
             )
+            humidity_pct = float(w.get('humidity_pct', np.nan))
+            precip_pct   = float(w.get('precip_pct', np.nan))
         else:
-            temp_f = wind_speed = wind_favor = np.nan
+            temp_f = wind_speed = wind_favor = humidity_pct = precip_pct = np.nan
             is_dome = 0
+
+        wind_desc = wind_description(wind_speed, wind_favor, is_dome)
 
         # Two sides: home batters face away pitcher, away batters face home pitcher
         sides = [
@@ -496,6 +540,11 @@ def build_prediction_df(date_str, games, rosters,
                     'hr_park_factor': float(hr_park_factor) if pd.notna(hr_park_factor) else np.nan,
                     'temp_f':  temp_f, 'wind_speed': wind_speed,
                     'wind_favor': wind_favor, 'is_dome': is_dome,
+                    'humidity_pct': humidity_pct, 'precip_pct': precip_pct,
+                    'wind_description': wind_desc,
+                    # Game info
+                    'game_time': game.get('game_time'),
+                    'stadium':   game.get('stadium'),
                     # Handedness flags
                     'stand_R': stand_R, 'p_throws_R': p_throws_R,
                     # Pitcher rolling features
@@ -715,6 +764,8 @@ def run(date_str=None):
         'k_pct', 'bb_pct', 'contact_rate', 'exp_pa', 'p_contact_game',
         'adj_prob',                     # <-- input to fair-odds conversion
         'hr_park_factor', 'temp_f', 'wind_speed', 'wind_favor', 'is_dome',
+        'humidity_pct', 'precip_pct', 'wind_description',
+        'game_time', 'stadium',
         'season_hr', 'days_since_hr', 'p_fip',
         # Statcast rolling features used by model — also shown in web detail card
         'barrel_pct_15', 'hardhit_pct_15', 'flyball_pct_15',

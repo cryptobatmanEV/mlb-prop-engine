@@ -568,6 +568,8 @@ def save_output(df, date_str):
         'has_line', 'best_book', 'best_odds', 'book_implied', 'edge',
         'model_prob', 'k_pct', 'bb_pct', 'contact_rate', 'exp_pa', 'p_contact_game',
         'hr_park_factor', 'temp_f', 'wind_speed', 'wind_favor', 'is_dome',
+        'humidity_pct', 'precip_pct', 'wind_description',
+        'game_time', 'stadium',
         'season_hr', 'bat_order', 'game_total', 'recent_hr',
         'days_since_hr', 'p_fip',
         # Statcast rolling features — passed through for the web detail card

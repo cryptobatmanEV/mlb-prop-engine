@@ -7,7 +7,8 @@ Uses Open-Meteo — completely free, no account or API key needed.
   Forecast:          https://api.open-meteo.com
 
 Output: data/processed/weather.parquet
-Columns: game_date, home_team, temp_f, wind_speed, wind_favor, is_dome
+Columns: game_date, home_team, temp_f, wind_speed, wind_favor, is_dome,
+         humidity_pct, precip_pct (forecast mode only)
 
 --- What is wind_favor? ---
 Weather services report wind direction as where the wind is COMING FROM.
@@ -31,43 +32,44 @@ import pandas as pd
 import requests
 
 # ── Stadium metadata ─────────────────────────────────────────────────────────
-# cf  = compass bearing (degrees) from home plate toward center field
-#       0=North, 90=East, 180=South, 270=West
-# tz  = IANA timezone name for the stadium's city
+# cf   = compass bearing (degrees) from home plate toward center field
+#        0=North, 90=East, 180=South, 270=West
+# tz   = IANA timezone name for the stadium's city
 # dome = 1 if the roof is almost always closed (weather irrelevant)
+# name = stadium display name, shown in the web detail card
 STADIUMS = {
-    'ARI': {'lat': 33.4453, 'lon': -112.0668, 'cf': 315, 'tz': 'America/Phoenix',     'dome': 1},
-    'AZ':  {'lat': 33.4453, 'lon': -112.0668, 'cf': 315, 'tz': 'America/Phoenix',     'dome': 1},
-    'ATL': {'lat': 33.8908, 'lon':  -84.4678, 'cf':  15, 'tz': 'America/New_York',    'dome': 0},
-    'BAL': {'lat': 39.2838, 'lon':  -76.6217, 'cf':  50, 'tz': 'America/New_York',    'dome': 0},
-    'BOS': {'lat': 42.3467, 'lon':  -71.0972, 'cf':  65, 'tz': 'America/New_York',    'dome': 0},
-    'CHC': {'lat': 41.9484, 'lon':  -87.6553, 'cf':  15, 'tz': 'America/Chicago',     'dome': 0},
-    'CWS': {'lat': 41.8299, 'lon':  -87.6338, 'cf':   0, 'tz': 'America/Chicago',     'dome': 0},
-    'CIN': {'lat': 39.0979, 'lon':  -84.5075, 'cf':  15, 'tz': 'America/New_York',    'dome': 0},
-    'CLE': {'lat': 41.4962, 'lon':  -81.6852, 'cf': 325, 'tz': 'America/New_York',    'dome': 0},
-    'COL': {'lat': 39.7559, 'lon': -104.9942, 'cf':   5, 'tz': 'America/Denver',      'dome': 0},
-    'DET': {'lat': 42.3390, 'lon':  -83.0485, 'cf': 345, 'tz': 'America/Detroit',     'dome': 0},
-    'HOU': {'lat': 29.7573, 'lon':  -95.3554, 'cf': 330, 'tz': 'America/Chicago',     'dome': 1},
-    'KC':  {'lat': 39.0517, 'lon':  -94.4803, 'cf':   5, 'tz': 'America/Chicago',     'dome': 0},
-    'LAA': {'lat': 33.8003, 'lon': -117.8827, 'cf': 335, 'tz': 'America/Los_Angeles', 'dome': 0},
-    'LAD': {'lat': 34.0739, 'lon': -118.2400, 'cf':   0, 'tz': 'America/Los_Angeles', 'dome': 0},
-    'MIA': {'lat': 25.7781, 'lon':  -80.2197, 'cf':  20, 'tz': 'America/New_York',    'dome': 1},
-    'MIL': {'lat': 43.0280, 'lon':  -87.9712, 'cf': 345, 'tz': 'America/Chicago',     'dome': 0},
-    'MIN': {'lat': 44.9817, 'lon':  -93.2784, 'cf': 320, 'tz': 'America/Chicago',     'dome': 0},
-    'NYM': {'lat': 40.7571, 'lon':  -73.8458, 'cf':   0, 'tz': 'America/New_York',    'dome': 0},
-    'NYY': {'lat': 40.8296, 'lon':  -73.9262, 'cf':  20, 'tz': 'America/New_York',    'dome': 0},
-    'OAK': {'lat': 37.7516, 'lon': -122.2005, 'cf': 335, 'tz': 'America/Los_Angeles', 'dome': 0},
-    'ATH': {'lat': 38.5802, 'lon': -121.5000, 'cf':   5, 'tz': 'America/Los_Angeles', 'dome': 0},
-    'PHI': {'lat': 39.9056, 'lon':  -75.1666, 'cf':  10, 'tz': 'America/New_York',    'dome': 0},
-    'PIT': {'lat': 40.4469, 'lon':  -80.0057, 'cf': 355, 'tz': 'America/New_York',    'dome': 0},
-    'SD':  {'lat': 32.7076, 'lon': -117.1570, 'cf': 320, 'tz': 'America/Los_Angeles', 'dome': 0},
-    'SF':  {'lat': 37.7786, 'lon': -122.3893, 'cf':  55, 'tz': 'America/Los_Angeles', 'dome': 0},
-    'SEA': {'lat': 47.5914, 'lon': -122.3325, 'cf': 350, 'tz': 'America/Los_Angeles', 'dome': 0},
-    'STL': {'lat': 38.6226, 'lon':  -90.1928, 'cf': 350, 'tz': 'America/Chicago',     'dome': 0},
-    'TB':  {'lat': 27.7683, 'lon':  -82.6534, 'cf':  10, 'tz': 'America/New_York',    'dome': 1},
-    'TEX': {'lat': 32.7510, 'lon':  -97.0832, 'cf':   5, 'tz': 'America/Chicago',     'dome': 1},
-    'TOR': {'lat': 43.6414, 'lon':  -79.3894, 'cf':  30, 'tz': 'America/Toronto',     'dome': 0},
-    'WSH': {'lat': 38.8730, 'lon':  -77.0074, 'cf':  40, 'tz': 'America/New_York',    'dome': 0},
+    'ARI': {'lat': 33.4453, 'lon': -112.0668, 'cf': 315, 'tz': 'America/Phoenix',     'dome': 1, 'name': 'Chase Field'},
+    'AZ':  {'lat': 33.4453, 'lon': -112.0668, 'cf': 315, 'tz': 'America/Phoenix',     'dome': 1, 'name': 'Chase Field'},
+    'ATL': {'lat': 33.8908, 'lon':  -84.4678, 'cf':  15, 'tz': 'America/New_York',    'dome': 0, 'name': 'Truist Park'},
+    'BAL': {'lat': 39.2838, 'lon':  -76.6217, 'cf':  50, 'tz': 'America/New_York',    'dome': 0, 'name': 'Camden Yards'},
+    'BOS': {'lat': 42.3467, 'lon':  -71.0972, 'cf':  65, 'tz': 'America/New_York',    'dome': 0, 'name': 'Fenway Park'},
+    'CHC': {'lat': 41.9484, 'lon':  -87.6553, 'cf':  15, 'tz': 'America/Chicago',     'dome': 0, 'name': 'Wrigley Field'},
+    'CWS': {'lat': 41.8299, 'lon':  -87.6338, 'cf':   0, 'tz': 'America/Chicago',     'dome': 0, 'name': 'Rate Field'},
+    'CIN': {'lat': 39.0979, 'lon':  -84.5075, 'cf':  15, 'tz': 'America/New_York',    'dome': 0, 'name': 'Great American Ball Park'},
+    'CLE': {'lat': 41.4962, 'lon':  -81.6852, 'cf': 325, 'tz': 'America/New_York',    'dome': 0, 'name': 'Progressive Field'},
+    'COL': {'lat': 39.7559, 'lon': -104.9942, 'cf':   5, 'tz': 'America/Denver',      'dome': 0, 'name': 'Coors Field'},
+    'DET': {'lat': 42.3390, 'lon':  -83.0485, 'cf': 345, 'tz': 'America/Detroit',     'dome': 0, 'name': 'Comerica Park'},
+    'HOU': {'lat': 29.7573, 'lon':  -95.3554, 'cf': 330, 'tz': 'America/Chicago',     'dome': 1, 'name': 'Daikin Park'},
+    'KC':  {'lat': 39.0517, 'lon':  -94.4803, 'cf':   5, 'tz': 'America/Chicago',     'dome': 0, 'name': 'Kauffman Stadium'},
+    'LAA': {'lat': 33.8003, 'lon': -117.8827, 'cf': 335, 'tz': 'America/Los_Angeles', 'dome': 0, 'name': 'Angel Stadium'},
+    'LAD': {'lat': 34.0739, 'lon': -118.2400, 'cf':   0, 'tz': 'America/Los_Angeles', 'dome': 0, 'name': 'Dodger Stadium'},
+    'MIA': {'lat': 25.7781, 'lon':  -80.2197, 'cf':  20, 'tz': 'America/New_York',    'dome': 1, 'name': 'loanDepot Park'},
+    'MIL': {'lat': 43.0280, 'lon':  -87.9712, 'cf': 345, 'tz': 'America/Chicago',     'dome': 0, 'name': 'American Family Field'},
+    'MIN': {'lat': 44.9817, 'lon':  -93.2784, 'cf': 320, 'tz': 'America/Chicago',     'dome': 0, 'name': 'Target Field'},
+    'NYM': {'lat': 40.7571, 'lon':  -73.8458, 'cf':   0, 'tz': 'America/New_York',    'dome': 0, 'name': 'Citi Field'},
+    'NYY': {'lat': 40.8296, 'lon':  -73.9262, 'cf':  20, 'tz': 'America/New_York',    'dome': 0, 'name': 'Yankee Stadium'},
+    'OAK': {'lat': 37.7516, 'lon': -122.2005, 'cf': 335, 'tz': 'America/Los_Angeles', 'dome': 0, 'name': 'Sutter Health Park'},
+    'ATH': {'lat': 38.5802, 'lon': -121.5000, 'cf':   5, 'tz': 'America/Los_Angeles', 'dome': 0, 'name': 'Sutter Health Park'},
+    'PHI': {'lat': 39.9056, 'lon':  -75.1666, 'cf':  10, 'tz': 'America/New_York',    'dome': 0, 'name': 'Citizens Bank Park'},
+    'PIT': {'lat': 40.4469, 'lon':  -80.0057, 'cf': 355, 'tz': 'America/New_York',    'dome': 0, 'name': 'PNC Park'},
+    'SD':  {'lat': 32.7076, 'lon': -117.1570, 'cf': 320, 'tz': 'America/Los_Angeles', 'dome': 0, 'name': 'Petco Park'},
+    'SF':  {'lat': 37.7786, 'lon': -122.3893, 'cf':  55, 'tz': 'America/Los_Angeles', 'dome': 0, 'name': 'Oracle Park'},
+    'SEA': {'lat': 47.5914, 'lon': -122.3325, 'cf': 350, 'tz': 'America/Los_Angeles', 'dome': 0, 'name': 'T-Mobile Park'},
+    'STL': {'lat': 38.6226, 'lon':  -90.1928, 'cf': 350, 'tz': 'America/Chicago',     'dome': 0, 'name': 'Busch Stadium'},
+    'TB':  {'lat': 27.7683, 'lon':  -82.6534, 'cf':  10, 'tz': 'America/New_York',    'dome': 1, 'name': 'Tropicana Field'},
+    'TEX': {'lat': 32.7510, 'lon':  -97.0832, 'cf':   5, 'tz': 'America/Chicago',     'dome': 1, 'name': 'Globe Life Field'},
+    'TOR': {'lat': 43.6414, 'lon':  -79.3894, 'cf':  30, 'tz': 'America/Toronto',     'dome': 0, 'name': 'Rogers Centre'},
+    'WSH': {'lat': 38.8730, 'lon':  -77.0074, 'cf':  40, 'tz': 'America/New_York',    'dome': 0, 'name': 'Nationals Park'},
 }
 
 
@@ -97,13 +99,15 @@ def calc_wind_favor(wind_speed, wind_dir, cf_bearing):
 def _fetch_daily(lat, lon, tz, start_date=None, end_date=None, forecast=False):
     """
     One Open-Meteo call. Returns a DataFrame with daily rows:
-      game_date (Timestamp, midnight), temp_f, wind_speed (mph), wind_dir (degrees from)
+      game_date (Timestamp, midnight), temp_f, wind_speed (mph), wind_dir (degrees from),
+      humidity_pct (%), precip_pct (% chance of precipitation, forecast mode only)
     """
     if forecast:
         url = 'https://api.open-meteo.com/v1/forecast'
         params = dict(
             latitude=lat, longitude=lon,
-            daily='temperature_2m_max,windspeed_10m_max,winddirection_10m_dominant',
+            daily='temperature_2m_max,windspeed_10m_max,winddirection_10m_dominant,'
+                  'relative_humidity_2m_max,precipitation_probability_max',
             temperature_unit='fahrenheit',
             wind_speed_unit='mph',
             timezone=tz,
@@ -132,12 +136,19 @@ def _fetch_daily(lat, lon, tz, start_date=None, end_date=None, forecast=False):
     d = resp.json()['daily']
 
     # pd.to_numeric(..., errors='coerce') turns any null/None values into NaN
-    return pd.DataFrame({
+    out = pd.DataFrame({
         'game_date':  pd.to_datetime(d['time']).normalize(),
         'temp_f':     pd.to_numeric(d['temperature_2m_max'],          errors='coerce'),
         'wind_speed': pd.to_numeric(d['windspeed_10m_max'],           errors='coerce'),
         'wind_dir':   pd.to_numeric(d['winddirection_10m_dominant'],  errors='coerce'),
     })
+    if forecast:
+        out['humidity_pct'] = pd.to_numeric(d.get('relative_humidity_2m_max'), errors='coerce')
+        out['precip_pct']   = pd.to_numeric(d.get('precipitation_probability_max'), errors='coerce')
+    else:
+        out['humidity_pct'] = np.nan
+        out['precip_pct']   = np.nan
+    return out
 
 
 # ── Public functions ───────────────────────────────────────────────────────────
@@ -243,7 +254,8 @@ def fetch_forecast(target_date_str, home_teams):
     Returns
     -------
     DataFrame with columns:
-        game_date, home_team, temp_f, wind_speed, wind_favor, is_dome
+        game_date, home_team, temp_f, wind_speed, wind_favor, is_dome,
+        humidity_pct, precip_pct
     """
     target = pd.Timestamp(target_date_str).normalize()
     rows = []
@@ -274,6 +286,8 @@ def fetch_forecast(target_date_str, home_teams):
                 'wind_speed': 0.0 if meta['dome'] else ws,
                 'wind_favor': wf,
                 'is_dome':    meta['dome'],
+                'humidity_pct': float(r['humidity_pct']) if pd.notna(r['humidity_pct']) else np.nan,
+                'precip_pct':   float(r['precip_pct'])   if pd.notna(r['precip_pct'])   else np.nan,
             })
         except Exception as e:
             print(f"  {team}: ERROR — {e}")

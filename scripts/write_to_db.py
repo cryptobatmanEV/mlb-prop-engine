@@ -78,6 +78,11 @@ MIGRATE_HR_PREDICTIONS = [
     "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS vs_pitcher_avg FLOAT",
     "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS hr_vs_r INTEGER",
     "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS hr_vs_l INTEGER",
+    "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS humidity_pct FLOAT",
+    "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS precip_pct FLOAT",
+    "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS wind_description TEXT",
+    "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS game_time TEXT",
+    "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS stadium TEXT",
     # Results columns — written by log_results.py, never overwritten by the pipeline upsert
     "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS hit_hr BOOLEAN",
     "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS actual_hr_count INTEGER",
@@ -135,6 +140,11 @@ CREATE TABLE IF NOT EXISTS hr_predictions (
     vs_pitcher_avg  FLOAT,
     hr_vs_r         INTEGER,
     hr_vs_l         INTEGER,
+    humidity_pct    FLOAT,
+    precip_pct      FLOAT,
+    wind_description TEXT,
+    game_time       TEXT,
+    stadium         TEXT,
     hit_hr          BOOLEAN,
     actual_hr_count INTEGER,
     created_at      TIMESTAMPTZ DEFAULT NOW(),
@@ -155,7 +165,8 @@ INSERT INTO hr_predictions (
     days_since_hr, p_fip,
     pitcher_era, pitcher_hr9, pitcher_hr_allowed, pitcher_ip,
     vs_pitcher_ab, vs_pitcher_h, vs_pitcher_hr, vs_pitcher_avg,
-    hr_vs_r, hr_vs_l
+    hr_vs_r, hr_vs_l,
+    humidity_pct, precip_pct, wind_description, game_time, stadium
 ) VALUES (
     %(game_date)s, %(batter)s, %(game_id)s,
     %(player_name)s, %(team_abbr)s, %(stand)s, %(pitcher_name)s, %(p_throws)s,
@@ -170,7 +181,8 @@ INSERT INTO hr_predictions (
     %(days_since_hr)s, %(p_fip)s,
     %(pitcher_era)s, %(pitcher_hr9)s, %(pitcher_hr_allowed)s, %(pitcher_ip)s,
     %(vs_pitcher_ab)s, %(vs_pitcher_h)s, %(vs_pitcher_hr)s, %(vs_pitcher_avg)s,
-    %(hr_vs_r)s, %(hr_vs_l)s
+    %(hr_vs_r)s, %(hr_vs_l)s,
+    %(humidity_pct)s, %(precip_pct)s, %(wind_description)s, %(game_time)s, %(stadium)s
 )
 ON CONFLICT (game_date, batter, game_id) DO UPDATE SET
     player_name              = EXCLUDED.player_name,
@@ -214,6 +226,11 @@ ON CONFLICT (game_date, batter, game_id) DO UPDATE SET
     vs_pitcher_avg           = EXCLUDED.vs_pitcher_avg,
     hr_vs_r                  = EXCLUDED.hr_vs_r,
     hr_vs_l                  = EXCLUDED.hr_vs_l,
+    humidity_pct             = EXCLUDED.humidity_pct,
+    precip_pct               = EXCLUDED.precip_pct,
+    wind_description         = EXCLUDED.wind_description,
+    game_time                = EXCLUDED.game_time,
+    stadium                  = EXCLUDED.stadium,
     created_at               = NOW();
 """
 
@@ -331,6 +348,11 @@ def run(date_str=None):
                         'vs_pitcher_avg': _clean(row.get('vs_pitcher_avg')),
                         'hr_vs_r': _int(row.get('hr_vs_r')),
                         'hr_vs_l': _int(row.get('hr_vs_l')),
+                        'humidity_pct':     _clean(row.get('humidity_pct')),
+                        'precip_pct':       _clean(row.get('precip_pct')),
+                        'wind_description': _str(row.get('wind_description')),
+                        'game_time':        _str(row.get('game_time')),
+                        'stadium':          _str(row.get('stadium')),
                     })
         print(f"  Done -- {len(df)} rows upserted.")
     finally:

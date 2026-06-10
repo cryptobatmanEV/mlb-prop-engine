@@ -57,8 +57,14 @@ export type Row = {
   // Season HR by opposing pitcher hand for detail card
   hr_vs_r: number | null;
   hr_vs_l: number | null;
-  // Game temperature for detail card
+  // Game environment for detail card
   temp_f: number | null;
+  humidity_pct: number | null;
+  precip_pct: number | null;
+  wind_description: string | null;
+  // Game info for detail card
+  game_time: string | null;
+  stadium: string | null;
 };
 
 type SortKey =
@@ -379,14 +385,57 @@ function DetailCard({ row }: { row: Row }) {
           alignSelf: 'stretch', margin: '0 4px',
         }} />
 
-        {/* Temperature section */}
+        {/* Game environment section */}
         <div>
-          <div style={SECTION_LABEL}>TEMPERATURE</div>
+          <div style={SECTION_LABEL}>GAME ENVIRONMENT</div>
           <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
             <div style={{ minWidth: '56px' }}>
               <div style={STAT_LABEL}>TEMP</div>
               <div style={{ ...STAT_VAL, color: 'var(--ev-text)' }}>
                 {row.temp_f == null || isNaN(row.temp_f) ? '—' : `${Math.round(row.temp_f)}°F`}
+              </div>
+            </div>
+            <div style={{ minWidth: '56px' }}>
+              <div style={STAT_LABEL}>HUMIDITY</div>
+              <div style={{ ...STAT_VAL, color: 'var(--ev-text)' }}>
+                {row.humidity_pct == null || isNaN(row.humidity_pct) ? '—' : `${Math.round(row.humidity_pct)}%`}
+              </div>
+            </div>
+            <div style={{ minWidth: '56px' }}>
+              <div style={STAT_LABEL}>PRECIP</div>
+              <div style={{ ...STAT_VAL, color: 'var(--ev-text)' }}>
+                {row.precip_pct == null || isNaN(row.precip_pct) ? '—' : `${Math.round(row.precip_pct)}%`}
+              </div>
+            </div>
+            <div style={{ minWidth: '56px' }}>
+              <div style={STAT_LABEL}>WIND</div>
+              <div style={{ ...STAT_VAL, color: 'var(--ev-text)' }}>
+                {row.wind_description ?? '—'}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Divider */}
+        <div style={{
+          width: '1px', background: 'var(--ev-border)',
+          alignSelf: 'stretch', margin: '0 4px',
+        }} />
+
+        {/* Game info section */}
+        <div>
+          <div style={SECTION_LABEL}>GAME INFO</div>
+          <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+            <div style={{ minWidth: '56px' }}>
+              <div style={STAT_LABEL}>GAME TIME</div>
+              <div style={{ ...STAT_VAL, color: 'var(--ev-text)' }}>
+                {row.game_time ?? '—'}
+              </div>
+            </div>
+            <div style={{ minWidth: '56px' }}>
+              <div style={STAT_LABEL}>STADIUM</div>
+              <div style={{ ...STAT_VAL, color: 'var(--ev-text)' }}>
+                {row.stadium ?? '—'}
               </div>
             </div>
           </div>
