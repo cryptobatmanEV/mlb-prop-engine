@@ -283,7 +283,7 @@ def backfill_tracked_bets(date_str, pred_df):
         print(f"  WARNING: tracked_bets backfill failed: {e}")
 
 
-def run(date_str=None):
+def run(date_str=None, force_db=False):
     if date_str is None:
         date_str = (date_cls.today() - timedelta(days=1)).isoformat()
 
@@ -293,7 +293,19 @@ def run(date_str=None):
 
     # Guard against logging the same date twice
     if already_logged(date_str):
-        print(f"\n  {date_str} is already in the log. Nothing to do.")
+        if not force_db:
+            print(f"\n  {date_str} is already in the log. Nothing to do.")
+            print_calibration_summary()
+            return
+
+        # --force-db: re-run the Neon writes from the existing log row(s)
+        # without re-appending to results_log.csv. Useful to backfill
+        # hr_predictions/tracked_bets after a DB connection issue.
+        print(f"\n  {date_str} is already in the log -- re-running DB writes only.")
+        log = pd.read_csv(LOG_PATH)
+        pred_df = log[log['game_date'].astype(str) == str(date_str)].copy()
+        write_results_to_db(date_str, pred_df)
+        backfill_tracked_bets(date_str, pred_df)
         print_calibration_summary()
         return
 
@@ -359,5 +371,8 @@ def run(date_str=None):
 
 
 if __name__ == '__main__':
-    date_arg = sys.argv[1] if len(sys.argv) > 1 else None
-    run(date_arg)
+    args = sys.argv[1:]
+    force_db = '--force-db' in args
+    args = [a for a in args if a != '--force-db']
+    date_arg = args[0] if args else None
+    run(date_arg, force_db=force_db)
