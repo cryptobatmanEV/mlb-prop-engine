@@ -68,6 +68,16 @@ MIGRATE_HR_PREDICTIONS = [
     "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS p_hr_per_bb_allowed_10 FLOAT",
     "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS days_since_hr INTEGER",
     "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS p_fip FLOAT",
+    "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS pitcher_era FLOAT",
+    "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS pitcher_hr9 FLOAT",
+    "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS pitcher_hr_allowed INTEGER",
+    "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS pitcher_ip FLOAT",
+    "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS vs_pitcher_ab INTEGER",
+    "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS vs_pitcher_h INTEGER",
+    "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS vs_pitcher_hr INTEGER",
+    "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS vs_pitcher_avg FLOAT",
+    "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS hr_vs_r INTEGER",
+    "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS hr_vs_l INTEGER",
     # Results columns — written by log_results.py, never overwritten by the pipeline upsert
     "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS hit_hr BOOLEAN",
     "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS actual_hr_count INTEGER",
@@ -115,6 +125,16 @@ CREATE TABLE IF NOT EXISTS hr_predictions (
     p_hr_per_bb_allowed_10   FLOAT,
     days_since_hr   INTEGER,
     p_fip           FLOAT,
+    pitcher_era        FLOAT,
+    pitcher_hr9        FLOAT,
+    pitcher_hr_allowed INTEGER,
+    pitcher_ip         FLOAT,
+    vs_pitcher_ab   INTEGER,
+    vs_pitcher_h    INTEGER,
+    vs_pitcher_hr   INTEGER,
+    vs_pitcher_avg  FLOAT,
+    hr_vs_r         INTEGER,
+    hr_vs_l         INTEGER,
     hit_hr          BOOLEAN,
     actual_hr_count INTEGER,
     created_at      TIMESTAMPTZ DEFAULT NOW(),
@@ -132,7 +152,10 @@ INSERT INTO hr_predictions (
     barrel_pct_15, hardhit_pct_15, flyball_pct_15,
     avg_ev_15, xwoba_15, xslg_15,
     p_barrel_pct_allowed_10, p_hardhit_pct_allowed_10, p_hr_per_bb_allowed_10,
-    days_since_hr, p_fip
+    days_since_hr, p_fip,
+    pitcher_era, pitcher_hr9, pitcher_hr_allowed, pitcher_ip,
+    vs_pitcher_ab, vs_pitcher_h, vs_pitcher_hr, vs_pitcher_avg,
+    hr_vs_r, hr_vs_l
 ) VALUES (
     %(game_date)s, %(batter)s, %(game_id)s,
     %(player_name)s, %(team_abbr)s, %(stand)s, %(pitcher_name)s, %(p_throws)s,
@@ -144,7 +167,10 @@ INSERT INTO hr_predictions (
     %(barrel_pct_15)s, %(hardhit_pct_15)s, %(flyball_pct_15)s,
     %(avg_ev_15)s, %(xwoba_15)s, %(xslg_15)s,
     %(p_barrel_pct_allowed_10)s, %(p_hardhit_pct_allowed_10)s, %(p_hr_per_bb_allowed_10)s,
-    %(days_since_hr)s, %(p_fip)s
+    %(days_since_hr)s, %(p_fip)s,
+    %(pitcher_era)s, %(pitcher_hr9)s, %(pitcher_hr_allowed)s, %(pitcher_ip)s,
+    %(vs_pitcher_ab)s, %(vs_pitcher_h)s, %(vs_pitcher_hr)s, %(vs_pitcher_avg)s,
+    %(hr_vs_r)s, %(hr_vs_l)s
 )
 ON CONFLICT (game_date, batter, game_id) DO UPDATE SET
     player_name              = EXCLUDED.player_name,
@@ -178,6 +204,16 @@ ON CONFLICT (game_date, batter, game_id) DO UPDATE SET
     p_hr_per_bb_allowed_10   = EXCLUDED.p_hr_per_bb_allowed_10,
     days_since_hr            = EXCLUDED.days_since_hr,
     p_fip                    = EXCLUDED.p_fip,
+    pitcher_era              = EXCLUDED.pitcher_era,
+    pitcher_hr9              = EXCLUDED.pitcher_hr9,
+    pitcher_hr_allowed       = EXCLUDED.pitcher_hr_allowed,
+    pitcher_ip               = EXCLUDED.pitcher_ip,
+    vs_pitcher_ab            = EXCLUDED.vs_pitcher_ab,
+    vs_pitcher_h             = EXCLUDED.vs_pitcher_h,
+    vs_pitcher_hr            = EXCLUDED.vs_pitcher_hr,
+    vs_pitcher_avg           = EXCLUDED.vs_pitcher_avg,
+    hr_vs_r                  = EXCLUDED.hr_vs_r,
+    hr_vs_l                  = EXCLUDED.hr_vs_l,
     created_at               = NOW();
 """
 
@@ -285,6 +321,16 @@ def run(date_str=None):
                         'p_hr_per_bb_allowed_10':   _clean(row.get('p_hr_per_bb_allowed_10')),
                         'days_since_hr': _int(row.get('days_since_hr')),
                         'p_fip':         _clean(row.get('p_fip')),
+                        'pitcher_era':        _clean(row.get('pitcher_era')),
+                        'pitcher_hr9':        _clean(row.get('pitcher_hr9')),
+                        'pitcher_hr_allowed': _int(row.get('pitcher_hr_allowed')),
+                        'pitcher_ip':         _clean(row.get('pitcher_ip')),
+                        'vs_pitcher_ab':  _int(row.get('vs_pitcher_ab')),
+                        'vs_pitcher_h':   _int(row.get('vs_pitcher_h')),
+                        'vs_pitcher_hr':  _int(row.get('vs_pitcher_hr')),
+                        'vs_pitcher_avg': _clean(row.get('vs_pitcher_avg')),
+                        'hr_vs_r': _int(row.get('hr_vs_r')),
+                        'hr_vs_l': _int(row.get('hr_vs_l')),
                     })
         print(f"  Done -- {len(df)} rows upserted.")
     finally:

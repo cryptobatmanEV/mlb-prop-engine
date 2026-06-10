@@ -44,6 +44,21 @@ export type Row = {
   p_fip: number | null;
   hit_hr: boolean | null;
   actual_hr_count: number | null;
+  // Pitcher season profile for detail card
+  pitcher_era: number | null;
+  pitcher_hr9: number | null;
+  pitcher_hr_allowed: number | null;
+  pitcher_ip: number | null;
+  // Batter-vs-pitcher career matchup for detail card
+  vs_pitcher_ab: number | null;
+  vs_pitcher_h: number | null;
+  vs_pitcher_hr: number | null;
+  vs_pitcher_avg: number | null;
+  // Season HR by opposing pitcher hand for detail card
+  hr_vs_r: number | null;
+  hr_vs_l: number | null;
+  // Game temperature for detail card
+  temp_f: number | null;
 };
 
 type SortKey =
@@ -131,6 +146,56 @@ function fmtContext(key: ContextKey, val: number | null): string {
   if (val == null || isNaN(val)) return '—';
   if (key === 'p_fip' || key === 'game_total') return val.toFixed(2);
   return String(Math.round(val));
+}
+
+// ── Pitcher profile (season ERA, HR/9, HR allowed, IP) ──────────────────────
+
+type PitcherProfileKey = 'pitcher_era' | 'pitcher_hr9' | 'pitcher_hr_allowed' | 'pitcher_ip';
+
+const PITCHER_PROFILE_STATS: { key: PitcherProfileKey; label: string }[] = [
+  { key: 'pitcher_era',        label: 'ERA'        },
+  { key: 'pitcher_hr9',        label: 'HR/9'       },
+  { key: 'pitcher_hr_allowed', label: 'HR ALLOWED' },
+  { key: 'pitcher_ip',         label: 'IP'         },
+];
+
+function fmtPitcherProfile(key: PitcherProfileKey, val: number | null): string {
+  if (val == null || isNaN(val)) return '—';
+  if (key === 'pitcher_hr_allowed') return String(Math.round(val));
+  if (key === 'pitcher_ip') return val.toFixed(1);
+  return val.toFixed(2);
+}
+
+// ── Batter vs pitcher career matchup ────────────────────────────────────────
+
+type VsPitcherKey = 'vs_pitcher_ab' | 'vs_pitcher_h' | 'vs_pitcher_hr' | 'vs_pitcher_avg';
+
+const VS_PITCHER_STATS: { key: VsPitcherKey; label: string }[] = [
+  { key: 'vs_pitcher_ab',  label: 'AB'  },
+  { key: 'vs_pitcher_h',   label: 'H'   },
+  { key: 'vs_pitcher_hr',  label: 'HR'  },
+  { key: 'vs_pitcher_avg', label: 'AVG' },
+];
+
+function fmtVsPitcher(key: VsPitcherKey, val: number | null): string {
+  if (val == null || isNaN(val)) return '—';
+  if (key === 'vs_pitcher_avg') {
+    const rounded = Math.round(val * 1000);
+    return '.' + String(rounded).padStart(3, '0');
+  }
+  return String(Math.round(val));
+}
+
+// ── Platoon splits (season HR vs RHP / vs LHP) ──────────────────────────────
+
+const PLATOON_STATS: { key: 'hr_vs_r' | 'hr_vs_l'; label: string }[] = [
+  { key: 'hr_vs_r', label: 'VS R' },
+  { key: 'hr_vs_l', label: 'VS L' },
+];
+
+function fmtPlatoon(val: number | null): string {
+  if (val == null || isNaN(val)) return '—';
+  return `${Math.round(val)} HR`;
 }
 
 // ── Detail card ────────────────────────────────────────────────────────────
@@ -229,6 +294,101 @@ function DetailCard({ row }: { row: Row }) {
                 </div>
               );
             })}
+          </div>
+        </div>
+
+        {/* Divider */}
+        <div style={{
+          width: '1px', background: 'var(--ev-border)',
+          alignSelf: 'stretch', margin: '0 4px',
+        }} />
+
+        {/* Pitcher profile section */}
+        <div>
+          <div style={SECTION_LABEL}>PITCHER PROFILE</div>
+          <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+            {PITCHER_PROFILE_STATS.map(({ key, label }) => {
+              const val = row[key as keyof Row] as number | null;
+              return (
+                <div key={key} style={{ minWidth: '56px' }}>
+                  <div style={STAT_LABEL}>{label}</div>
+                  <div style={{ ...STAT_VAL, color: 'var(--ev-text)' }}>
+                    {fmtPitcherProfile(key, val)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Divider */}
+        <div style={{
+          width: '1px', background: 'var(--ev-border)',
+          alignSelf: 'stretch', margin: '0 4px',
+        }} />
+
+        {/* Batter vs pitcher section */}
+        <div>
+          <div style={SECTION_LABEL}>BATTER VS PITCHER</div>
+          {row.vs_pitcher_ab != null && row.vs_pitcher_ab > 0 ? (
+            <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+              {VS_PITCHER_STATS.map(({ key, label }) => {
+                const val = row[key as keyof Row] as number | null;
+                return (
+                  <div key={key} style={{ minWidth: '56px' }}>
+                    <div style={STAT_LABEL}>{label}</div>
+                    <div style={{ ...STAT_VAL, color: 'var(--ev-text)' }}>
+                      {fmtVsPitcher(key, val)}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{ ...STAT_VAL, color: 'var(--ev-muted)' }}>NO HISTORY</div>
+          )}
+        </div>
+
+        {/* Divider */}
+        <div style={{
+          width: '1px', background: 'var(--ev-border)',
+          alignSelf: 'stretch', margin: '0 4px',
+        }} />
+
+        {/* Platoon splits section */}
+        <div>
+          <div style={SECTION_LABEL}>PLATOON SPLITS</div>
+          <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+            {PLATOON_STATS.map(({ key, label }) => {
+              const val = row[key as keyof Row] as number | null;
+              return (
+                <div key={key} style={{ minWidth: '56px' }}>
+                  <div style={STAT_LABEL}>{label}</div>
+                  <div style={{ ...STAT_VAL, color: 'var(--ev-text)' }}>
+                    {fmtPlatoon(val)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Divider */}
+        <div style={{
+          width: '1px', background: 'var(--ev-border)',
+          alignSelf: 'stretch', margin: '0 4px',
+        }} />
+
+        {/* Temperature section */}
+        <div>
+          <div style={SECTION_LABEL}>TEMPERATURE</div>
+          <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+            <div style={{ minWidth: '56px' }}>
+              <div style={STAT_LABEL}>TEMP</div>
+              <div style={{ ...STAT_VAL, color: 'var(--ev-text)' }}>
+                {row.temp_f == null || isNaN(row.temp_f) ? '—' : `${Math.round(row.temp_f)}°F`}
+              </div>
+            </div>
           </div>
         </div>
 

@@ -26,6 +26,7 @@ adj_prob       P(HR in today's game) = model_prob × p_contact_game
 import os
 import sys
 import time
+import json
 import joblib
 import requests
 import numpy as np
@@ -44,6 +45,8 @@ PLATOON_PATH = 'data/processed/platoon_features.parquet'
 PARK_PATH    = 'data/processed/park_factors.csv'
 WEATHER_PATH = 'data/processed/weather.parquet'
 FIP_PATH     = 'data/processed/pitcher_fip.parquet'
+STATCAST_PATH = 'data/raw/statcast_batted_balls.parquet'
+VS_PITCHER_CACHE_PATH = 'data/processed/vs_pitcher_cache.json'
 OUT_DIR      = 'data/predictions'
 
 # Must stay in sync with models/train.py FEATURES list
@@ -184,6 +187,118 @@ def fetch_contact_rates(season):
     except Exception as e:
         print(f"  WARNING: contact rate fetch failed ({e}) — will use league averages")
         return pd.DataFrame(columns=['player_id', 'k_pct', 'bb_pct'])
+
+
+# ── Pitcher season stats (ERA, HR/9, HR allowed, IP) ──────────────────────────
+
+def _parse_ip(ip_str):
+    """Convert MLB's '180.2' notation (full innings + thirds) to decimal innings."""
+    try:
+        parts = str(ip_str).split('.')
+        full   = int(parts[0])
+        thirds = int(parts[1]) if len(parts) > 1 else 0
+        return full + thirds / 3.0
+    except (ValueError, IndexError, AttributeError):
+        return 0.0
+
+
+def fetch_pitcher_season_stats(season):
+    """
+    Fetch this season's ERA, HR allowed, and IP for all pitchers from the
+    MLB Stats API. One bulk call — returns a DataFrame keyed by pitcher_id
+    with: pitcher_era, pitcher_hr9, pitcher_hr_allowed, pitcher_ip.
+    """
+    try:
+        data = _mlb('stats', {
+            'stats': 'season', 'group': 'pitching',
+            'sportId': 1, 'season': season, 'limit': 2000,
+        })
+        rows = []
+        for s in data.get('stats', [{}])[0].get('splits', []):
+            ip = _parse_ip(s['stat'].get('inningsPitched', '0'))
+            if ip <= 0:
+                continue
+            hr = int(s['stat'].get('homeRuns', 0) or 0)
+            rows.append({
+                'pitcher_id':         s['player']['id'],
+                'pitcher_era':        float(s['stat'].get('era', 0) or 0),
+                'pitcher_hr_allowed': hr,
+                'pitcher_ip':         ip,
+                'pitcher_hr9':        hr / ip * 9,
+            })
+        df = pd.DataFrame(rows)
+        print(f"  Pitcher season stats: {len(df)} pitchers with IP > 0")
+        return df
+    except Exception as e:
+        print(f"  WARNING: pitcher season stats fetch failed ({e})")
+        return pd.DataFrame(columns=['pitcher_id', 'pitcher_era', 'pitcher_hr_allowed',
+                                      'pitcher_ip', 'pitcher_hr9'])
+
+
+# ── Batter-vs-pitcher career matchup ──────────────────────────────────────────
+
+def load_vs_pitcher_cache():
+    if os.path.exists(VS_PITCHER_CACHE_PATH):
+        try:
+            with open(VS_PITCHER_CACHE_PATH) as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return {}
+    return {}
+
+
+def save_vs_pitcher_cache(cache):
+    os.makedirs(os.path.dirname(VS_PITCHER_CACHE_PATH), exist_ok=True)
+    with open(VS_PITCHER_CACHE_PATH, 'w') as f:
+        json.dump(cache, f)
+
+
+EMPTY_MATCHUP = {'vs_pitcher_ab': 0, 'vs_pitcher_h': 0, 'vs_pitcher_hr': 0, 'vs_pitcher_avg': np.nan}
+
+
+def fetch_vs_pitcher(batter_id, pitcher_id):
+    """Career AB/H/HR/AVG for batter_id against pitcher_id (all seasons combined)."""
+    try:
+        data = _mlb(f'people/{batter_id}/stats', {
+            'stats': 'vsPlayer', 'opposingPlayerId': pitcher_id,
+            'group': 'hitting', 'sportId': 1,
+        })
+        ab = h = hr = 0
+        for stat_group in data.get('stats', []):
+            for s in stat_group.get('splits', []):
+                stat = s.get('stat', {})
+                ab += int(stat.get('atBats', 0) or 0)
+                h  += int(stat.get('hits', 0) or 0)
+                hr += int(stat.get('homeRuns', 0) or 0)
+        if ab == 0:
+            return dict(EMPTY_MATCHUP)
+        return {
+            'vs_pitcher_ab':  ab,
+            'vs_pitcher_h':   h,
+            'vs_pitcher_hr':  hr,
+            'vs_pitcher_avg': round(h / ab, 3),
+        }
+    except Exception:
+        return dict(EMPTY_MATCHUP)
+
+
+# ── Season HR by opposing pitcher hand ────────────────────────────────────────
+
+def compute_season_platoon_hr(season):
+    """
+    Season home run counts vs RHP and vs LHP, computed directly from the
+    Statcast batted-ball store (every HR is a batted ball, so this is exact).
+    Returns a DataFrame: batter, hr_vs_r, hr_vs_l.
+    """
+    df = pd.read_parquet(STATCAST_PATH, columns=['batter', 'p_throws', 'events', 'game_year'])
+    season_hrs = df[(df['game_year'] == season) & (df['events'] == 'home_run')]
+
+    grouped = (season_hrs.groupby(['batter', 'p_throws']).size()
+               .unstack(fill_value=0)
+               .reindex(columns=['R', 'L'], fill_value=0)
+               .rename(columns={'R': 'hr_vs_r', 'L': 'hr_vs_l'})
+               .reset_index())
+    return grouped
 
 
 # ── Load latest features from parquets ───────────────────────────────────────
@@ -501,6 +616,14 @@ def run(date_str=None):
     print(f"\nFetching {season} contact rates (K%/BB%) from MLB Stats API...")
     contact_df = fetch_contact_rates(season)
 
+    # ── Pitcher season stats (ERA, HR/9, HR allowed, IP) ─────────────────────
+    print(f"\nFetching {season} pitcher season stats (ERA, HR/9, IP) from MLB Stats API...")
+    pitcher_season_df = fetch_pitcher_season_stats(season)
+
+    # ── Season HR by opposing pitcher hand (vs RHP / vs LHP) ─────────────────
+    print(f"\nComputing {season} season HR vs RHP/LHP from Statcast store...")
+    platoon_hr_df = compute_season_platoon_hr(season)
+
     # Enrich batter_feats with season_hr and days_since_hr BEFORE model scoring.
     # season_hr comes from the MLB Stats API hit count (already fetched above).
     # days_since_hr is relative to today's prediction date.
@@ -525,6 +648,47 @@ def run(date_str=None):
         print("No prediction rows built — confirm batter history exists.")
         return pred_df
     print(f"  {len(pred_df)} batter-game rows assembled")
+
+    # Merge pitcher season stats (ERA, HR/9, HR allowed, IP)
+    if not pitcher_season_df.empty:
+        pred_df = pred_df.merge(pitcher_season_df, on='pitcher_id', how='left')
+    else:
+        for c in ['pitcher_era', 'pitcher_hr_allowed', 'pitcher_ip', 'pitcher_hr9']:
+            pred_df[c] = np.nan
+
+    # Merge season HR vs RHP / vs LHP
+    pred_df = pred_df.merge(platoon_hr_df, on='batter', how='left')
+    pred_df['hr_vs_r'] = pred_df['hr_vs_r'].fillna(0).astype(int)
+    pred_df['hr_vs_l'] = pred_df['hr_vs_l'].fillna(0).astype(int)
+
+    # ── Batter-vs-pitcher career matchups ────────────────────────────────────
+    print("\nFetching batter-vs-pitcher matchup history (cached across days)...")
+    cache = load_vs_pitcher_cache()
+    pairs = pred_df[['batter', 'pitcher_id']].drop_duplicates()
+    matchup_rows = []
+    n_fetched = 0
+    for _, r in pairs.iterrows():
+        bid = int(r['batter'])
+        pid = r['pitcher_id']
+        if pd.isna(pid):
+            matchup_rows.append({'batter': bid, 'pitcher_id': pid, **EMPTY_MATCHUP})
+            continue
+        pid = int(pid)
+        key = f"{bid}_{pid}_{date_str}"
+        if key in cache:
+            m = cache[key]
+        else:
+            m = fetch_vs_pitcher(bid, pid)
+            cache[key] = m
+            n_fetched += 1
+            time.sleep(0.05)
+        matchup_rows.append({'batter': bid, 'pitcher_id': pid, **m})
+    save_vs_pitcher_cache(cache)
+    print(f"  {len(pairs)} batter-pitcher pairs ({n_fetched} fetched, "
+          f"{len(pairs) - n_fetched} cached)")
+
+    matchup_df = pd.DataFrame(matchup_rows)
+    pred_df = pred_df.merge(matchup_df, on=['batter', 'pitcher_id'], how='left')
 
     # Fill any features not yet in the DataFrame
     for f in FEATURES:
@@ -556,6 +720,12 @@ def run(date_str=None):
         'barrel_pct_15', 'hardhit_pct_15', 'flyball_pct_15',
         'avg_ev_15', 'xwoba_15', 'xslg_15',
         'p_barrel_pct_allowed_10', 'p_hardhit_pct_allowed_10', 'p_hr_per_bb_allowed_10',
+        # Pitcher season profile — shown in web detail card
+        'pitcher_era', 'pitcher_hr9', 'pitcher_hr_allowed', 'pitcher_ip',
+        # Batter-vs-pitcher career matchup — shown in web detail card
+        'vs_pitcher_ab', 'vs_pitcher_h', 'vs_pitcher_hr', 'vs_pitcher_avg',
+        # Season HR by opposing pitcher hand — shown in web detail card
+        'hr_vs_r', 'hr_vs_l',
         'game_date', 'game_id', 'batter',
     ]
     pred_df[[c for c in out_cols if c in pred_df.columns]].to_csv(out_path, index=False)

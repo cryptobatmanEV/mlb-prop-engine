@@ -574,6 +574,10 @@ def save_output(df, date_str):
         'barrel_pct_15', 'hardhit_pct_15', 'flyball_pct_15',
         'avg_ev_15', 'xwoba_15', 'xslg_15',
         'p_barrel_pct_allowed_10', 'p_hardhit_pct_allowed_10', 'p_hr_per_bb_allowed_10',
+        # Pitcher season profile, batter-vs-pitcher matchup, season HR by hand
+        'pitcher_era', 'pitcher_hr9', 'pitcher_hr_allowed', 'pitcher_ip',
+        'vs_pitcher_ab', 'vs_pitcher_h', 'vs_pitcher_hr', 'vs_pitcher_avg',
+        'hr_vs_r', 'hr_vs_l',
         'game_date', 'game_id', 'batter',
     ]
     save_cols = [c for c in out_cols if c in df.columns]
