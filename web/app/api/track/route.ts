@@ -61,3 +61,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const id = req.nextUrl.searchParams.get('id');
+    if (!id) {
+      return NextResponse.json({ error: 'Missing id' }, { status: 400 });
+    }
+
+    const sql = getDb();
+    const result = await sql`
+      DELETE FROM tracked_bets WHERE id = ${Number(id)} RETURNING id
+    `;
+
+    if (result.length === 0) {
+      return NextResponse.json({ error: 'Bet not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[/api/track] DELETE error:', msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}

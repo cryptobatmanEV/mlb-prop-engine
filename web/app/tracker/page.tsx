@@ -1,25 +1,12 @@
 import { getDb } from '@/lib/db';
 import Nav from '../components/Nav';
 import PerformanceCharts, { type PLPoint, type CalibPoint } from './PerformanceCharts';
+import BetsTable from './BetsTable';
+import { type TrackedBet, toISODate } from './shared';
 
 export const dynamic = 'force-dynamic';
 
 // ── Types ──────────────────────────────────────────────────────────────────
-
-type TrackedBet = {
-  id:           number;
-  game_date:    string;
-  batter:       number;
-  player_name:  string;
-  team_abbr:    string;
-  adj_prob:     number | null;
-  tracked_odds: number | null;
-  edge:         number | null;
-  stake_units:  number;
-  hit_hr:       boolean | null;
-  settled:      boolean;
-  created_at:   string;
-};
 
 type TrackerStats = {
   total_bets:     number;
@@ -31,18 +18,6 @@ type TrackerStats = {
 
 // ── Formatters ─────────────────────────────────────────────────────────────
 
-function fmtOdds(o: number | null) {
-  if (o == null) return '—';
-  return o > 0 ? `+${o}` : `${o}`;
-}
-
-function fmtEdge(edge: number | null, hasLine: boolean): { text: string; color: string } {
-  if (!hasLine || edge == null) return { text: '—', color: 'var(--ev-dim)' };
-  const text = `${edge > 0 ? '+' : ''}${(edge * 100).toFixed(1)}%`;
-  const color = edge > 0 ? 'var(--ev-green)' : edge > -0.03 ? 'var(--ev-muted)' : 'var(--ev-red)';
-  return { text, color };
-}
-
 function fmtPL(profit: number, settled: number) {
   if (settled === 0) return '—';
   return `${profit >= 0 ? '+' : ''}${profit.toFixed(1)}u`;
@@ -52,29 +27,6 @@ function fmtROI(profit: number, staked: number) {
   if (staked === 0) return '—';
   const pct = (profit / staked) * 100;
   return `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
-}
-
-// Postgres DATE columns come back from Neon as JS Date objects, not strings.
-// String(date) (e.g. "Mon Jun 09 2026 ...") is not YYYY-MM-DD, so always go
-// through toISOString() before slicing out month/day.
-function toISODate(d: unknown): string {
-  if (d instanceof Date) return d.toISOString().slice(0, 10);
-  return String(d).slice(0, 10);
-}
-
-function fmtDate(d: unknown) {
-  return toISODate(d).slice(5).replace('-', '/');
-}
-
-function betPL(bet: TrackedBet): string {
-  if (bet.hit_hr === null) return '—';
-  if (!bet.hit_hr) return `-${bet.stake_units.toFixed(1)}u`;
-  if (bet.tracked_odds == null) return '—';
-  const odds = bet.tracked_odds;
-  const profit = odds > 0
-    ? bet.stake_units * (odds / 100)
-    : bet.stake_units * (100 / Math.abs(odds));
-  return `+${profit.toFixed(2)}u`;
 }
 
 // ── Style tokens ───────────────────────────────────────────────────────────
@@ -91,13 +43,6 @@ const CARD: React.CSSProperties = {
   background:   'var(--ev-card)',
   border:       '1px solid var(--ev-border)',
   borderRadius: '2px',
-};
-
-const TH: React.CSSProperties = {
-  ...LABEL,
-  padding:    '8px 14px',
-  fontWeight:  500,
-  background: 'rgba(255,255,255,0.02)',
 };
 
 // ── Page ───────────────────────────────────────────────────────────────────
@@ -301,58 +246,7 @@ export default async function TrackerPage() {
             </div>
 
             {/* Bets table */}
-            {bets.length > 0 && (
-              <div style={{ ...CARD, overflowX: 'auto' }}>
-                <table style={{
-                  width: '100%', borderCollapse: 'collapse',
-                  fontFamily: 'var(--font-mono)', fontSize: '11px',
-                }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--ev-border)' }}>
-                      {(['DATE', 'PLAYER', 'TEAM', 'ODDS', 'STAKE', 'EDGE', 'P/L', 'RESULT'] as const).map(
-                        (h, i) => (
-                          <th key={h} style={{ ...TH, textAlign: i >= 3 ? 'right' : 'left' }}>{h}</th>
-                        )
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {bets.map(bet => {
-                      const { text: edgeText, color: edgeCol } = fmtEdge(bet.edge, bet.tracked_odds != null);
-                      const pl        = betPL(bet);
-                      const result    = bet.hit_hr === null ? 'PENDING' : bet.hit_hr ? 'WIN' : 'LOSS';
-                      const resColor  = bet.hit_hr === null ? 'var(--ev-dim)' : bet.hit_hr ? 'var(--ev-green)' : 'var(--ev-red)';
-                      const plColor   = pl === '—' ? 'var(--ev-dim)' : pl.startsWith('+') ? 'var(--ev-green)' : 'var(--ev-red)';
-                      return (
-                        <tr key={bet.id} className="bet-row" style={{ borderBottom: '1px solid var(--ev-border)' }}>
-                          <td style={{ padding: '9px 14px', color: 'var(--ev-dim)' }}>{fmtDate(bet.game_date)}</td>
-                          <td style={{ padding: '9px 14px', color: 'var(--ev-text)' }}>{bet.player_name}</td>
-                          <td style={{ padding: '9px 14px', color: 'var(--ev-muted)' }}>{bet.team_abbr}</td>
-                          <td style={{ padding: '9px 14px', textAlign: 'right', color: 'var(--ev-blue)' }}>
-                            {fmtOdds(bet.tracked_odds)}
-                          </td>
-                          <td style={{ padding: '9px 14px', textAlign: 'right', color: 'var(--ev-muted)' }}>
-                            {bet.stake_units}u
-                          </td>
-                          <td style={{ padding: '9px 14px', textAlign: 'right', color: edgeCol }}>
-                            {edgeText}
-                          </td>
-                          <td style={{ padding: '9px 14px', textAlign: 'right', color: plColor }}>
-                            {pl}
-                          </td>
-                          <td style={{
-                            padding: '9px 14px', textAlign: 'right',
-                            color: resColor, fontWeight: bet.hit_hr != null ? 600 : 400,
-                          }}>
-                            {result}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            <BetsTable bets={bets} />
           </>
         )}
 
