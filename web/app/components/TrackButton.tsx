@@ -33,33 +33,55 @@ export default function TrackButton({
   const [phase,      setPhase]      = useState<Phase>('idle');
   const [stake,      setStake]      = useState('1');
   const [savedStake, setSavedStake] = useState('1');
+  const [errorMsg,   setErrorMsg]   = useState('');
 
   async function submit() {
     const units = parseFloat(stake);
     if (!units || units <= 0) return;
     setSavedStake(stake);
     setPhase('submitting');
+
+    const url  = '/api/track';
+    const body = JSON.stringify({
+      game_date:    gameDate,
+      batter,
+      player_name:  playerName,
+      team_abbr:    teamAbbr,
+      adj_prob:     adjProb,
+      tracked_odds: trackedOdds,
+      edge:         trackedEdge,
+      stake_units:  units,
+    });
+
+    // eslint-disable-next-line no-console
+    console.log('[TrackButton] POST', url, 'body =', body);
+
     try {
-      const res = await fetch('/api/track', {
+      const res  = await fetch(url, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          game_date:    gameDate,
-          batter,
-          player_name:  playerName,
-          team_abbr:    teamAbbr,
-          adj_prob:     adjProb,
-          tracked_odds: trackedOdds,
-          edge:         trackedEdge,
-          stake_units:  units,
-        }),
+        body,
       });
-      if (!res.ok) throw new Error('bad response');
+      const text = await res.text();
+
+      // eslint-disable-next-line no-console
+      console.log('[TrackButton] response status =', res.status, 'body =', text);
+
+      if (!res.ok) {
+        setErrorMsg(`${res.status}: ${text}`);
+        setPhase('error');
+        setTimeout(() => { setPhase('idle'); setErrorMsg(''); }, 8000);
+        return;
+      }
       setPhase('done');
       router.refresh();
-    } catch {
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // eslint-disable-next-line no-console
+      console.error('[TrackButton] fetch failed:', msg);
+      setErrorMsg(msg);
       setPhase('error');
-      setTimeout(() => setPhase('idle'), 2000);
+      setTimeout(() => { setPhase('idle'); setErrorMsg(''); }, 8000);
     }
   }
 
@@ -155,8 +177,22 @@ export default function TrackButton({
 
   // ERROR
   return (
-    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--ev-red)', letterSpacing: '2px' }}>
-      ERROR
+    <span
+      title={errorMsg}
+      style={{
+        fontFamily:    'var(--font-mono)',
+        fontSize:      '10px',
+        color:         'var(--ev-red)',
+        letterSpacing: '1px',
+        maxWidth:      '260px',
+        overflow:      'hidden',
+        textOverflow:  'ellipsis',
+        whiteSpace:    'nowrap',
+        display:       'inline-block',
+        verticalAlign: 'bottom',
+      }}
+    >
+      ERROR: {errorMsg || 'unknown'}
     </span>
   );
 }
