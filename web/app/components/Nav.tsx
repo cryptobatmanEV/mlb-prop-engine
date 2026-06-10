@@ -3,6 +3,7 @@ import Link from 'next/link';
 const links = [
   { href: '/',        label: 'CARD',    id: 'card'    },
   { href: '/tracker', label: 'TRACKER', id: 'tracker' },
+  { href: '/guide',   label: 'GUIDE',   id: 'guide'   },
 ] as const;
 
 type Page = (typeof links)[number]['id'];

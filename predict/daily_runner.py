@@ -551,7 +551,7 @@ def run(date_str=None):
         'k_pct', 'bb_pct', 'contact_rate', 'exp_pa', 'p_contact_game',
         'adj_prob',                     # <-- input to fair-odds conversion
         'hr_park_factor', 'temp_f', 'wind_speed', 'wind_favor', 'is_dome',
-        'season_hr',
+        'season_hr', 'days_since_hr', 'p_fip',
         # Statcast rolling features used by model — also shown in web detail card
         'barrel_pct_15', 'hardhit_pct_15', 'flyball_pct_15',
         'avg_ev_15', 'xwoba_15', 'xslg_15',

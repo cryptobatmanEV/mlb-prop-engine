@@ -66,6 +66,8 @@ MIGRATE_HR_PREDICTIONS = [
     "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS p_barrel_pct_allowed_10 FLOAT",
     "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS p_hardhit_pct_allowed_10 FLOAT",
     "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS p_hr_per_bb_allowed_10 FLOAT",
+    "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS days_since_hr INTEGER",
+    "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS p_fip FLOAT",
     # Results columns — written by log_results.py, never overwritten by the pipeline upsert
     "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS hit_hr BOOLEAN",
     "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS actual_hr_count INTEGER",
@@ -111,6 +113,8 @@ CREATE TABLE IF NOT EXISTS hr_predictions (
     p_barrel_pct_allowed_10  FLOAT,
     p_hardhit_pct_allowed_10 FLOAT,
     p_hr_per_bb_allowed_10   FLOAT,
+    days_since_hr   INTEGER,
+    p_fip           FLOAT,
     hit_hr          BOOLEAN,
     actual_hr_count INTEGER,
     created_at      TIMESTAMPTZ DEFAULT NOW(),
@@ -127,7 +131,8 @@ INSERT INTO hr_predictions (
     season_hr, bat_order, game_total, recent_hr,
     barrel_pct_15, hardhit_pct_15, flyball_pct_15,
     avg_ev_15, xwoba_15, xslg_15,
-    p_barrel_pct_allowed_10, p_hardhit_pct_allowed_10, p_hr_per_bb_allowed_10
+    p_barrel_pct_allowed_10, p_hardhit_pct_allowed_10, p_hr_per_bb_allowed_10,
+    days_since_hr, p_fip
 ) VALUES (
     %(game_date)s, %(batter)s, %(game_id)s,
     %(player_name)s, %(team_abbr)s, %(stand)s, %(pitcher_name)s, %(p_throws)s,
@@ -138,7 +143,8 @@ INSERT INTO hr_predictions (
     %(season_hr)s, %(bat_order)s, %(game_total)s, %(recent_hr)s,
     %(barrel_pct_15)s, %(hardhit_pct_15)s, %(flyball_pct_15)s,
     %(avg_ev_15)s, %(xwoba_15)s, %(xslg_15)s,
-    %(p_barrel_pct_allowed_10)s, %(p_hardhit_pct_allowed_10)s, %(p_hr_per_bb_allowed_10)s
+    %(p_barrel_pct_allowed_10)s, %(p_hardhit_pct_allowed_10)s, %(p_hr_per_bb_allowed_10)s,
+    %(days_since_hr)s, %(p_fip)s
 )
 ON CONFLICT (game_date, batter, game_id) DO UPDATE SET
     player_name              = EXCLUDED.player_name,
@@ -170,6 +176,8 @@ ON CONFLICT (game_date, batter, game_id) DO UPDATE SET
     p_barrel_pct_allowed_10  = EXCLUDED.p_barrel_pct_allowed_10,
     p_hardhit_pct_allowed_10 = EXCLUDED.p_hardhit_pct_allowed_10,
     p_hr_per_bb_allowed_10   = EXCLUDED.p_hr_per_bb_allowed_10,
+    days_since_hr            = EXCLUDED.days_since_hr,
+    p_fip                    = EXCLUDED.p_fip,
     created_at               = NOW();
 """
 
@@ -275,6 +283,8 @@ def run(date_str=None):
                         'p_barrel_pct_allowed_10':  _clean(row.get('p_barrel_pct_allowed_10')),
                         'p_hardhit_pct_allowed_10': _clean(row.get('p_hardhit_pct_allowed_10')),
                         'p_hr_per_bb_allowed_10':   _clean(row.get('p_hr_per_bb_allowed_10')),
+                        'days_since_hr': _int(row.get('days_since_hr')),
+                        'p_fip':         _clean(row.get('p_fip')),
                     })
         print(f"  Done -- {len(df)} rows upserted.")
     finally:

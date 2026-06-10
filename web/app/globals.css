@@ -39,6 +39,9 @@ input[type='number']::-webkit-outer-spin-button,
 input[type='number']::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 input[type='number'] { -moz-appearance: textfield; }
 
+/* Dim placeholder text */
+input::placeholder { color: var(--ev-dim); opacity: 1; }
+
 /* Modal overlay */
 .modal-overlay {
   position: fixed;

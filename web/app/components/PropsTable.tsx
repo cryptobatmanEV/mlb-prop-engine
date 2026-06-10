@@ -40,6 +40,8 @@ export type Row = {
   p_barrel_pct_allowed_10: number | null;
   p_hardhit_pct_allowed_10: number | null;
   p_hr_per_bb_allowed_10: number | null;
+  days_since_hr: number | null;
+  p_fip: number | null;
   hit_hr: boolean | null;
   actual_hr_count: number | null;
 };
@@ -116,6 +118,21 @@ const PITCHER_STATS: { key: StatKey; label: string }[] = [
   { key: 'p_hr_per_bb_allowed_10',   label: 'HR/BB ALLOWED'    },
 ];
 
+type ContextKey = 'season_hr' | 'days_since_hr' | 'p_fip' | 'game_total';
+
+const CONTEXT_STATS: { key: ContextKey; label: string }[] = [
+  { key: 'season_hr',     label: 'SZN HR'       },
+  { key: 'days_since_hr', label: 'DAYS SINCE HR' },
+  { key: 'p_fip',         label: 'PITCHER FIP'  },
+  { key: 'game_total',    label: 'O/U'          },
+];
+
+function fmtContext(key: ContextKey, val: number | null): string {
+  if (val == null || isNaN(val)) return '—';
+  if (key === 'p_fip' || key === 'game_total') return val.toFixed(2);
+  return String(Math.round(val));
+}
+
 // ── Detail card ────────────────────────────────────────────────────────────
 
 function DetailCard({ row }: { row: Row }) {
@@ -184,6 +201,30 @@ function DetailCard({ row }: { row: Row }) {
                   <div style={STAT_LABEL}>{label}</div>
                   <div style={{ ...STAT_VAL, color: statColor(key, val) }}>
                     {fmtStat(key, val)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Divider */}
+        <div style={{
+          width: '1px', background: 'var(--ev-border)',
+          alignSelf: 'stretch', margin: '0 4px',
+        }} />
+
+        {/* Context section */}
+        <div>
+          <div style={SECTION_LABEL}>CONTEXT</div>
+          <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+            {CONTEXT_STATS.map(({ key, label }) => {
+              const val = row[key as keyof Row] as number | null;
+              return (
+                <div key={key} style={{ minWidth: '56px' }}>
+                  <div style={STAT_LABEL}>{label}</div>
+                  <div style={{ ...STAT_VAL, color: 'var(--ev-text)' }}>
+                    {fmtContext(key, val)}
                   </div>
                 </div>
               );
@@ -609,15 +650,18 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                         </span>
                       )}
                       {row.recent_hr === 1 && row.hit_hr !== true && (
-                        <span style={{
-                          marginLeft:    '6px',
-                          fontSize:      '9px',
-                          letterSpacing: '1px',
-                          color:         'var(--ev-gold)',
-                          fontWeight:    600,
-                        }}>
-                          HOT
-                        </span>
+                        <span
+                          title="Hit a HR in last 5 games"
+                          style={{
+                            display:      'inline-block',
+                            marginLeft:   '6px',
+                            width:        '6px',
+                            height:       '6px',
+                            borderRadius: '50%',
+                            background:   'var(--ev-gold)',
+                            verticalAlign: 'middle',
+                          }}
+                        />
                       )}
                     </td>
 
@@ -695,7 +739,7 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                       <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
                         <input
                           type="text"
-                          placeholder="+1000"
+                          placeholder="ODDS"
                           value={rawInput}
                           onChange={e => setCustomOdds(prev => ({ ...prev, [row.batter]: e.target.value }))}
                           style={{
