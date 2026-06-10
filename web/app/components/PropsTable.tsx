@@ -217,6 +217,14 @@ function fmtOdds(o: number | null) {
   return o > 0 ? `+${o}` : `${o}`;
 }
 
+// Postgres DATE columns come back from Neon as JS Date objects, not strings.
+// String(date) (e.g. "Mon Jun 09 2026 ...") is not a valid Postgres date,
+// so always go through toISOString() to get YYYY-MM-DD.
+function toISODate(d: unknown): string {
+  if (d instanceof Date) return d.toISOString().slice(0, 10);
+  return String(d).slice(0, 10);
+}
+
 function fmtProb(p: number) { return (p * 100).toFixed(1) + '%'; }
 
 function edgeDisplay(edge: number | null, hasLine: boolean) {
@@ -740,7 +748,7 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                       onClick={e => e.stopPropagation()}
                     >
                       <TrackButton
-                        gameDate={String(row.game_date).slice(0, 10)}
+                        gameDate={toISODate(row.game_date)}
                         batter={row.batter}
                         playerName={row.player_name}
                         teamAbbr={row.team_abbr}

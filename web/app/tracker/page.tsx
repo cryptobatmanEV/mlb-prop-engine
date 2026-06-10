@@ -54,8 +54,16 @@ function fmtROI(profit: number, staked: number) {
   return `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
 }
 
-function fmtDate(d: string) {
-  return String(d).slice(5).replace('-', '/');
+// Postgres DATE columns come back from Neon as JS Date objects, not strings.
+// String(date) (e.g. "Mon Jun 09 2026 ...") is not YYYY-MM-DD, so always go
+// through toISOString() before slicing out month/day.
+function toISODate(d: unknown): string {
+  if (d instanceof Date) return d.toISOString().slice(0, 10);
+  return String(d).slice(0, 10);
+}
+
+function fmtDate(d: unknown) {
+  return toISODate(d).slice(5).replace('-', '/');
 }
 
 function betPL(bet: TrackedBet): string {
@@ -143,7 +151,7 @@ export default async function TrackerPage() {
             : 0)
         : -b.stake_units;
       cum += pl;
-      const date = String(b.game_date).slice(5).replace('-', '/');
+      const date = toISODate(b.game_date).slice(5).replace('-', '/');
       byDate.set(date, Math.round(cum * 100) / 100); // last write per date = end-of-day cumulative
     }
     plData = Array.from(byDate.entries()).map(([date, cumPL]) => ({ date, cumPL }));
