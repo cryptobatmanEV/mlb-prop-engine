@@ -2,9 +2,6 @@
 __pycache__/
 *.pyc
 
-# Raw Statcast data — large, pulled locally via pybaseball
-data/raw/
-
 # Generated daily outputs (committed by workflow after each run)
 # Excluded from manual dev work but tracked so CI can read yesterday's CSV
 data/predictions/

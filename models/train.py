@@ -4,9 +4,13 @@ import lightgbm as lgb
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.metrics import brier_score_loss, log_loss, roc_auc_score
 import joblib
+import json
 import os
 
 DATA = 'data/processed/training_dataset.parquet'
+MODEL_PATH = 'models/saved/hr_model.pkl'
+MODEL_PATH_V2 = 'models/saved/hr_model_v2.pkl'
+METRICS_PATH = 'models/saved/retrain_metrics.json'
 
 FEATURES = [
     'barrel_pct_15','hardhit_pct_15','flyball_pct_15','hr_per_bb_15','avg_ev_15','xwoba_15','xslg_15',
@@ -25,6 +29,23 @@ FEATURES = [
     'days_since_hr', # days since batter's most recent HR (NaN if none in history)
     'p_fip',         # pitcher's FIP from prior season (NaN for rookies/short samples)
 ]
+
+def evaluate_existing_model(X_test, y_test):
+    """ROC-AUC of the currently-deployed model on this test set, for before/after comparison.
+
+    Returns None if there's no existing model yet, or if it can't be scored
+    (e.g. its feature set no longer matches FEATURES) — in that case the new
+    model is promoted unconditionally.
+    """
+    if not os.path.exists(MODEL_PATH):
+        return None
+    try:
+        old_model = joblib.load(MODEL_PATH)
+        old_probs = old_model.predict_proba(X_test)[:, 1]
+        return roc_auc_score(y_test, old_probs)
+    except Exception as e:
+        print(f"Could not evaluate existing model ({e}); treating as no baseline.")
+        return None
 
 def train():
     print("Loading training data...")
@@ -88,9 +109,35 @@ def train():
         predicted=('pred','mean'), actual=('target_hr','mean'), n=('target_hr','size'))
     print(cal.to_string())
 
+    # Compare against the currently-deployed model on the same held-out data,
+    # and only promote the new model if it's at least as good.
+    prev_auc = evaluate_existing_model(X_test, y_test)
+    promote = prev_auc is None or auc >= prev_auc
+
+    print(f"\n{'='*40}")
+    if prev_auc is not None:
+        print(f"Previous model AUC: {prev_auc:.4f}")
+        print(f"New model AUC:      {auc:.4f}")
+    else:
+        print(f"New model AUC: {auc:.4f}  (no existing model to compare)")
+    print("PROMOTING new model to hr_model.pkl" if promote
+          else "KEEPING existing hr_model.pkl (new model did not improve AUC)")
+    print(f"{'='*40}")
+
     os.makedirs('models/saved', exist_ok=True)
-    joblib.dump(model, 'models/saved/hr_model_v2.pkl')
-    print("\nSaved model to models/saved/hr_model_v2.pkl")
-    print("(hr_model.pkl unchanged — run pipeline with v2 once you approve the numbers)")
+    joblib.dump(model, MODEL_PATH_V2)
+    if promote:
+        joblib.dump(model, MODEL_PATH)
+
+    with open(METRICS_PATH, 'w') as f:
+        json.dump({
+            'prev_auc': prev_auc,
+            'new_auc': auc,
+            'brier': brier,
+            'log_loss': ll,
+            'promoted': promote,
+        }, f, indent=2)
+    print(f"\nSaved new model to {MODEL_PATH_V2}")
+    print(f"Metrics written to {METRICS_PATH}")
 
 train()

@@ -1,0 +1,66 @@
+name: Weekly Model Retrain
+
+# Runs every Monday at 6 AM ET (10:00 UTC during EDT, April-October).
+# Same convention as daily_pipeline.yml: no off-season adjustment, so this
+# becomes 5 AM ET during EST (Nov-Mar) — fine since the offseason has no games.
+on:
+  schedule:
+    - cron: '0 10 * * 1'
+  workflow_dispatch:   # manual trigger from the Actions tab
+
+permissions:
+  contents: write   # needed to commit the refreshed data and model back to the repo
+
+jobs:
+  retrain:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # 1. Pull any newly completed games since the last update.
+      - name: Update Statcast data
+        run: python ingestion/update_statcast.py
+
+      # 2. Recompute rolling features and rebuild the joined training dataset
+      #    from the refreshed Statcast store.
+      - name: Rebuild features and training dataset
+        run: |
+          python features/batter_features.py
+          python features/pitcher_features.py
+          python features/platoon_features.py
+          python features/build_dataset.py
+
+      # 3 + 4. Retrain on 2021-2024, evaluate on the 2025+ holdout, and only
+      #    overwrite hr_model.pkl if the new AUC is >= the deployed model's AUC.
+      #    Always writes models/saved/retrain_metrics.json with the comparison.
+      - name: Retrain model
+        run: python models/train.py
+
+      # 5. Commit the refreshed data/model files, logging before/after AUC
+      #    in the commit message.
+      - name: Commit and push updates
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/raw/statcast_batted_balls.parquet \
+                  data/processed/batter_features.parquet \
+                  data/processed/pitcher_features.parquet \
+                  data/processed/platoon_features.parquet \
+                  models/saved/hr_model.pkl \
+                  models/saved/retrain_metrics.json
+          git diff --cached --quiet && echo "Nothing to commit" && exit 0
+          git commit -m "$(python scripts/format_retrain_commit.py)"
+          git push
