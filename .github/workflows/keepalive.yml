@@ -1,0 +1,41 @@
+name: Keepalive
+
+# GitHub automatically disables scheduled (cron) workflows after 60 days
+# with no repository activity (no pushed commits). During the off-season
+# the daily pipeline may go a long time without committing anything,
+# which would silently disable the daily/weekly cron schedules.
+#
+# This workflow makes one tiny commit per week so the repo always looks
+# "active" and the other scheduled workflows keep firing.
+
+on:
+  schedule:
+    - cron: '0 12 * * 0'   # Every Sunday at 12:00 UTC
+  workflow_dispatch:         # manual trigger from the Actions tab
+
+permissions:
+  contents: write   # needed to commit the heartbeat file back to the repo
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Update heartbeat file
+        run: |
+          mkdir -p .github/keepalive
+          date -u +'%Y-%m-%d %H:%M UTC' > .github/keepalive/last_run.txt
+
+      - name: Commit and push
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/keepalive/last_run.txt
+          git diff --cached --quiet && echo "Nothing to commit" && exit 0
+          git commit -m "Keepalive: $(date -u +'%Y-%m-%d')"
+          git push
