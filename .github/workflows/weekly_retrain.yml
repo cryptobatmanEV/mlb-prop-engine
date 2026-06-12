@@ -11,6 +11,9 @@ on:
 permissions:
   contents: write   # needed to commit the refreshed data and model back to the repo
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   retrain:
     runs-on: ubuntu-latest
