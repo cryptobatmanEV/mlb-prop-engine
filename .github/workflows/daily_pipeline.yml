@@ -1,14 +1,21 @@
 name: Daily Pipeline
 
-# Runs twice per day during baseball season:
-#   11 AM EDT (15:00 UTC) — early run after overnight lineups post
-#    4 PM EDT (20:00 UTC) — afternoon run after game-day lineups are confirmed
-# Both times assume EDT (UTC-4, April-October). No adjustment needed in off-season.
+# Runs five times per day during baseball season:
+#    9 AM EDT (13:00 UTC) — log-results-only run (no predictions; gives the
+#                           prior evening's late games time to finalize)
+#   11 AM EDT (15:00 UTC) — full pipeline, after overnight lineups post
+#    2 PM EDT (18:00 UTC) — full pipeline, refresh with confirmed lineups
+#    5 PM EDT (21:00 UTC) — full pipeline, afternoon/evening lineups confirmed
+#    8 PM EDT (00:00 UTC) — full pipeline, late lineup changes
+# All times assume EDT (UTC-4, April-October). No adjustment needed in off-season.
 
 on:
   schedule:
-    - cron: '0 15 * * *'   # 11:00 AM EDT
-    - cron: '0 20 * * *'   #  4:00 PM EDT
+    - cron: '0 13 * * *'   #  9:00 AM EDT — log results only
+    - cron: '0 15 * * *'   # 11:00 AM EDT — full pipeline
+    - cron: '0 18 * * *'   #  2:00 PM EDT — full pipeline
+    - cron: '0 21 * * *'   #  5:00 PM EDT — full pipeline
+    - cron: '0 0 * * *'    #  8:00 PM EDT — full pipeline
   workflow_dispatch:         # manual trigger from the Actions tab
 
 permissions:
@@ -44,7 +51,9 @@ jobs:
         run: python scripts/log_results.py
 
       # Generate today's predictions and write to Neon (powers the web app).
+      # Skipped on the 9 AM EDT (13:00 UTC) run, which only logs results.
       - name: Generate today's predictions
+        if: github.event.schedule != '0 13 * * *'
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
