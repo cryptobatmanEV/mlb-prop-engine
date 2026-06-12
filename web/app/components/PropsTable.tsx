@@ -17,6 +17,7 @@ export type Row = {
   pitcher_name: string | null;
   p_throws: string | null;
   home_team: string | null;
+  opp_team: string | null;
   is_home: string | null;
   adj_prob: number;
   fair_odds: number | null;
@@ -582,7 +583,7 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
       if (row.is_home === 'A') {
         map.set(row.game_id, `${row.team_abbr} @ ${row.home_team}`);
       } else if (!map.has(row.game_id) && row.home_team) {
-        map.set(row.game_id, `??? @ ${row.home_team}`);
+        map.set(row.game_id, `${row.opp_team ?? '???'} @ ${row.home_team}`);
       }
     }
     return map;

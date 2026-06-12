@@ -122,7 +122,8 @@ function StatChip({ label, value, sub, color }: { label: string; value: string; 
 // ── Component ──────────────────────────────────────────────────────────────
 
 export default function AiPicks({ rows }: { rows: Row[] }) {
-  // Opponent lookup: game_id + team_abbr -> opposing team_abbr
+  // Opponent lookup: game_id + team_abbr -> opposing team_abbr.
+  // Falls back to grouping by game_id for rows written before opp_team existed.
   const opponents = useMemo(() => {
     const byGame = new Map<number, Set<string>>();
     for (const r of rows) {
@@ -139,6 +140,10 @@ export default function AiPicks({ rows }: { rows: Row[] }) {
     }
     return map;
   }, [rows]);
+
+  function opponentFor(row: Row): string {
+    return row.opp_team ?? opponents.get(`${row.game_id}-${row.team_abbr}`) ?? 'TBD';
+  }
 
   const picks = useMemo(() => {
     return rows
@@ -170,7 +175,7 @@ export default function AiPicks({ rows }: { rows: Row[] }) {
         gap:                 '12px',
       }}>
         {picks.map(({ row, score, reason }, idx) => {
-          const opponent = opponents.get(`${row.game_id}-${row.team_abbr}`);
+          const opponent = opponentFor(row);
           const edgePct  = (row.edge as number) * 100;
           const edgeColor = edgePct > 5 ? 'var(--ev-green)' : 'var(--ev-green)';
 
@@ -189,7 +194,7 @@ export default function AiPicks({ rows }: { rows: Row[] }) {
                     {row.player_name}
                   </div>
                   <div style={{ ...LABEL, marginTop: '4px', fontSize: '9px' }}>
-                    {row.team_abbr} {row.is_home === 'H' ? 'vs' : '@'} {opponent ?? '???'}
+                    {row.team_abbr} {row.is_home === 'H' ? 'vs' : '@'} {opponent}
                     {row.game_time && <> &middot; {row.game_time}</>}
                   </div>
                   {row.pitcher_name && (

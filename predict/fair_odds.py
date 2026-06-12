@@ -562,7 +562,7 @@ def save_output(df, date_str):
     path = os.path.join(OUT_DIR, f'fair_odds_{date_str}.csv')
 
     out_cols = [
-        'player_name', 'team_abbr', 'stand', 'pitcher_name', 'p_throws', 'home_team',
+        'player_name', 'team_abbr', 'stand', 'pitcher_name', 'p_throws', 'home_team', 'opp_team',
         'is_home', 'lineup_source',
         'adj_prob', 'fair_odds',
         'has_line', 'best_book', 'best_odds', 'book_implied', 'edge',
@@ -726,7 +726,7 @@ def run(date_str=None):
                 c for c in pred_df.columns
                 if c not in existing_df.columns
                 and c not in ('game_date', 'player_name', 'team_abbr', 'stand',
-                              'pitcher_name', 'p_throws', 'home_team', 'lineup_source')
+                              'pitcher_name', 'p_throws', 'home_team', 'opp_team', 'lineup_source')
             ]
             if passthrough:
                 merge_src = pred_df[['game_id', 'batter'] + passthrough].drop_duplicates(['game_id', 'batter'])

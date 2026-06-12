@@ -83,6 +83,7 @@ MIGRATE_HR_PREDICTIONS = [
     "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS wind_description TEXT",
     "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS game_time TEXT",
     "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS stadium TEXT",
+    "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS opp_team TEXT",
     # Results columns — written by log_results.py, never overwritten by the pipeline upsert
     "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS hit_hr BOOLEAN",
     "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS actual_hr_count INTEGER",
@@ -100,6 +101,7 @@ CREATE TABLE IF NOT EXISTS hr_predictions (
     pitcher_name    TEXT,
     p_throws        TEXT,
     home_team       TEXT,
+    opp_team        TEXT,
     is_home         TEXT,
     lineup_source   TEXT,
     adj_prob        FLOAT,
@@ -155,7 +157,7 @@ CREATE TABLE IF NOT EXISTS hr_predictions (
 UPSERT = """
 INSERT INTO hr_predictions (
     game_date, batter, game_id,
-    player_name, team_abbr, stand, pitcher_name, p_throws, home_team, is_home, lineup_source,
+    player_name, team_abbr, stand, pitcher_name, p_throws, home_team, opp_team, is_home, lineup_source,
     adj_prob, fair_odds, has_line, best_book, best_odds, book_implied, edge,
     model_prob, hr_park_factor, temp_f, wind_speed, wind_favor, is_dome,
     season_hr, bat_order, game_total, recent_hr,
@@ -170,7 +172,7 @@ INSERT INTO hr_predictions (
 ) VALUES (
     %(game_date)s, %(batter)s, %(game_id)s,
     %(player_name)s, %(team_abbr)s, %(stand)s, %(pitcher_name)s, %(p_throws)s,
-    %(home_team)s, %(is_home)s, %(lineup_source)s,
+    %(home_team)s, %(opp_team)s, %(is_home)s, %(lineup_source)s,
     %(adj_prob)s, %(fair_odds)s, %(has_line)s, %(best_book)s, %(best_odds)s,
     %(book_implied)s, %(edge)s,
     %(model_prob)s, %(hr_park_factor)s, %(temp_f)s, %(wind_speed)s, %(wind_favor)s, %(is_dome)s,
@@ -186,6 +188,7 @@ INSERT INTO hr_predictions (
 )
 ON CONFLICT (game_date, batter, game_id) DO UPDATE SET
     player_name              = EXCLUDED.player_name,
+    opp_team                 = EXCLUDED.opp_team,
     is_home                  = EXCLUDED.is_home,
     lineup_source            = EXCLUDED.lineup_source,
     adj_prob                 = EXCLUDED.adj_prob,
@@ -308,6 +311,7 @@ def run(date_str=None):
                         'pitcher_name':  _str(row.get('pitcher_name')),
                         'p_throws':      _str(row.get('p_throws')),
                         'home_team':     _str(row.get('home_team')),
+                        'opp_team':      _str(row.get('opp_team')),
                         'is_home':       _str(row.get('is_home')),
                         'lineup_source': _str(row.get('lineup_source')),
                         'adj_prob':      _clean(row.get('adj_prob')),

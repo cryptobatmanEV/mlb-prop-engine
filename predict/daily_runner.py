@@ -481,11 +481,13 @@ def build_prediction_df(date_str, games, rosters,
             dict(batters=rosters.get(game['home_id'], []),
                  pitcher_id=game['away_pitcher_id'],
                  pitcher_name=game['away_pitcher_name'],
-                 team_id=game['home_id'], team_abbr=home_abbr, is_home='H'),
+                 team_id=game['home_id'], team_abbr=home_abbr, is_home='H',
+                 opp_team=game['away_abbr']),
             dict(batters=rosters.get(game['away_id'], []),
                  pitcher_id=game['home_pitcher_id'],
                  pitcher_name=game['home_pitcher_name'],
-                 team_id=game['away_id'], team_abbr=game['away_abbr'], is_home='A'),
+                 team_id=game['away_id'], team_abbr=game['away_abbr'], is_home='A',
+                 opp_team=home_abbr),
         ]
 
         for side in sides:
@@ -528,6 +530,7 @@ def build_prediction_df(date_str, games, rosters,
                     'player_name':  batter['name'],
                     'team_abbr':    side['team_abbr'],
                     'home_team':    home_abbr,
+                    'opp_team':     side['opp_team'],
                     'is_home':      side['is_home'],
                     'stand':        stand,
                     'pitcher_name': side['pitcher_name'],
@@ -759,7 +762,7 @@ def run(date_str=None):
     # Ordered output columns — identifiers first, then prediction columns,
     # then the per-component columns needed by Priority 4 fair-odds conversion
     out_cols = [
-        'player_name', 'team_abbr', 'stand', 'pitcher_name', 'p_throws', 'home_team', 'is_home',
+        'player_name', 'team_abbr', 'stand', 'pitcher_name', 'p_throws', 'home_team', 'opp_team', 'is_home',
         'model_prob',
         'k_pct', 'bb_pct', 'contact_rate', 'exp_pa', 'p_contact_game',
         'adj_prob',                     # <-- input to fair-odds conversion
