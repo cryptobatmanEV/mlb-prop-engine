@@ -6,13 +6,9 @@ import type { Row } from './PropsTable';
 
 // ── Config ─────────────────────────────────────────────────────────────────
 
-const MIN_EDGE   = 0.02; // HR edges run smaller than K edges -- 2% minimum to qualify
-const MAX_PICKS  = 5;
-
-// We don't track season-long plate appearances, so approximate the PA a
-// regular-lineup hitter has accumulated by mid-season. season_hr / this
-// estimate stands in for the "season HR rate" term in the scoring formula.
-const SEASON_PA_ESTIMATE = 280;
+const MIN_ADJ_PROB = 0.12; // don't surface low-probability longshots
+const MIN_EDGE     = 0;    // still require a positive edge, but it's a tiebreaker
+const MAX_PICKS    = 5;
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -41,48 +37,48 @@ type Pick = {
 
 function scorePick(row: Row): Pick | null {
   if (!row.has_line || row.edge == null || row.edge <= MIN_EDGE) return null;
-  if (row.adj_prob == null) return null;
+  if (row.adj_prob == null || row.adj_prob <= MIN_ADJ_PROB) return null;
 
-  const edgeScore = row.edge;
+  // Primary signal: who is most likely to homer tonight.
+  const probScore = row.adj_prob * 5;
 
   const barrel       = row.barrel_pct_15 ?? 0;
-  const barrelBonus  = (barrel - 0.08) * 3;
+  const barrelBonus  = (barrel - 0.08) * 2;
 
   const hardhit       = row.hardhit_pct_15 ?? 0;
-  const hardHitBonus  = (hardhit - 0.35) * 1.5;
+  const hardHitBonus  = (hardhit - 0.35) * 1;
 
   const park       = row.hr_park_factor ?? 100;
-  const parkBonus  = (park - 100) * 0.002;
+  const parkBonus  = (park - 100) * 0.003;
 
   const bo           = row.bat_order;
-  const lineupBonus  = bo != null && bo <= 4 ? 0.01 : bo != null && bo <= 6 ? 0.005 : 0;
+  const lineupBonus  = bo != null && bo <= 3 ? 0.03 : bo != null && bo <= 5 ? 0.015 : 0;
 
-  const seasonHr           = row.season_hr ?? 0;
-  const seasonHrRateBonus  = (seasonHr / SEASON_PA_ESTIMATE - 0.03) * 2;
+  // Secondary signal: edge is a tiebreaker, not the driver.
+  const edgeBonus = row.edge * 0.5;
 
-  const score = edgeScore + barrelBonus + hardHitBonus + parkBonus + lineupBonus + seasonHrRateBonus;
+  const score = probScore + barrelBonus + hardHitBonus + parkBonus + lineupBonus + edgeBonus;
 
-  // Build a one-line "why" from the strongest positive contributors
-  const candidates: { label: string; value: number }[] = [
-    { label: 'strong market edge',       value: edgeScore > 0.04 ? edgeScore       : 0 },
-    { label: 'elite barrel rate',        value: barrel    >= 0.12 ? barrelBonus    : 0 },
-    { label: 'consistent hard contact',  value: hardhit   >= 0.45 ? hardHitBonus   : 0 },
-    { label: 'HR-friendly park',         value: park      >= 105  ? parkBonus      : 0 },
+  // Build a one-line "why", always leading with the HR probability itself.
+  const supporting: { label: string; value: number }[] = [
+    { label: 'elite barrel rate',        value: barrel  >= 0.12 ? barrelBonus : 0 },
+    { label: 'consistent hard contact',  value: hardhit >= 0.45 ? hardHitBonus : 0 },
+    { label: 'HR-friendly park',         value: park    >= 105  ? parkBonus : 0 },
     {
-      label: bo != null && bo <= 4 ? 'top of the lineup' : 'middle of the lineup',
+      label: bo != null && bo <= 3 ? 'top of the order' : 'middle of the lineup',
       value: lineupBonus > 0 ? lineupBonus : 0,
     },
-    { label: 'proven power this season', value: seasonHr  >= 12   ? seasonHrRateBonus : 0 },
+    { label: 'positive market edge',     value: row.edge > 0.02 ? edgeBonus : 0 },
   ];
 
-  const top = candidates
+  const top = supporting
     .filter(c => c.value > 0)
     .sort((a, b) => b.value - a.value)
-    .slice(0, 3)
+    .slice(0, 2)
     .map(c => c.label);
 
-  const joined = top.length > 0 ? top.join(', ') : 'positive market edge';
-  const reason = joined.charAt(0).toUpperCase() + joined.slice(1) + '.';
+  const lead = `${(row.adj_prob * 100).toFixed(1)}% HR probability`;
+  const reason = [lead, ...top].join(', ') + '.';
 
   return { row, score, reason };
 }
@@ -158,7 +154,8 @@ export default function AiPicks({ rows }: { rows: Row[] }) {
       <div style={{ ...CARD, padding: '48px', textAlign: 'center' }}>
         <div style={{ ...LABEL, color: 'var(--ev-muted)', marginBottom: '6px' }}>NO AI PICKS TODAY</div>
         <div style={{ fontSize: '11px', color: 'var(--ev-dim)' }}>
-          Nothing clears the +{(MIN_EDGE * 100).toFixed(0)}% edge threshold yet. Check back after lineups/odds refresh.
+          Nothing clears the {(MIN_ADJ_PROB * 100).toFixed(0)}%+ HR probability / positive-edge threshold yet.
+          Check back after lineups/odds refresh.
         </div>
       </div>
     );
@@ -167,7 +164,7 @@ export default function AiPicks({ rows }: { rows: Row[] }) {
   return (
     <div>
       <div style={{ ...LABEL, marginBottom: '10px', letterSpacing: '2px' }}>
-        TOP {picks.length} HR PLAY{picks.length !== 1 ? 'S' : ''} &mdash; RANKED BY COMPOSITE CONFIDENCE SCORE
+        TOP {picks.length} HR PLAY{picks.length !== 1 ? 'S' : ''} &mdash; RANKED BY LIKELIHOOD TO HOMER
       </div>
       <div style={{
         display:             'grid',
