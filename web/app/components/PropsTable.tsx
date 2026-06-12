@@ -2,6 +2,7 @@
 
 import { useState, useMemo, Fragment } from 'react';
 import TrackButton from './TrackButton';
+import AiPicks from './AiPicks';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -558,7 +559,7 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
   const [evOnly,          setEvOnly]          = useState(false);
   const [expandedBatter,  setExpandedBatter]  = useState<number | null>(null);
   const [searchQuery,     setSearchQuery]     = useState('');
-  const [viewMode,        setViewMode]        = useState<'edge' | 'game'>('edge');
+  const [viewMode,        setViewMode]        = useState<'edge' | 'game' | 'ai'>('edge');
 
   function handleSort(key: SortKey | null) {
     if (!key) return;
@@ -699,7 +700,7 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
           borderRadius: '2px',
           overflow:     'hidden',
         }}>
-          {(['edge', 'game'] as const).map(mode => (
+          {(['edge', 'game', 'ai'] as const).map((mode, i, arr) => (
             <button
               key={mode}
               onClick={() => setViewMode(mode)}
@@ -711,12 +712,12 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                 padding:       '5px 11px',
                 cursor:        'pointer',
                 border:        'none',
-                borderRight:   mode === 'edge' ? '1px solid rgba(255,255,255,0.12)' : 'none',
+                borderRight:   i < arr.length - 1 ? '1px solid rgba(255,255,255,0.12)' : 'none',
                 background:    viewMode === mode ? 'rgba(255,255,255,0.07)' : 'transparent',
                 color:         viewMode === mode ? 'var(--ev-text)' : 'var(--ev-dim)',
               }}
             >
-              {mode === 'edge' ? 'BY EDGE' : 'BY GAME'}
+              {mode === 'edge' ? 'BY EDGE' : mode === 'game' ? 'BY GAME' : 'AI PICKS'}
             </button>
           ))}
         </div>
@@ -728,7 +729,11 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
         </span>
       </div>
 
+      {/* AI Picks */}
+      {viewMode === 'ai' && <AiPicks rows={rows} />}
+
       {/* Table */}
+      {viewMode !== 'ai' && (
       <div style={{
         background: 'var(--ev-card)', border: '1px solid var(--ev-border)',
         borderRadius: '2px', overflowX: 'auto',
@@ -1027,6 +1032,7 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
           </tbody>
         </table>
       </div>
+      )}
     </div>
   );
 }
