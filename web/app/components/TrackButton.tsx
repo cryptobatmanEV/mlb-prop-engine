@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
 type Props = {
@@ -11,9 +11,10 @@ type Props = {
   adjProb:     number;
   trackedOdds: number | null;
   trackedEdge: number | null;
+  isTracked?:  boolean;
 };
 
-type Phase = 'idle' | 'open' | 'submitting' | 'done' | 'error';
+type Phase = 'idle' | 'open' | 'submitting' | 'done' | 'error' | 'tracked';
 
 const BTN: React.CSSProperties = {
   fontFamily:    'var(--font-mono)',
@@ -27,13 +28,18 @@ const BTN: React.CSSProperties = {
 };
 
 export default function TrackButton({
-  gameDate, batter, playerName, teamAbbr, adjProb, trackedOdds, trackedEdge,
+  gameDate, batter, playerName, teamAbbr, adjProb, trackedOdds, trackedEdge, isTracked,
 }: Props) {
   const router = useRouter();
-  const [phase,      setPhase]      = useState<Phase>('idle');
+  const [phase,      setPhase]      = useState<Phase>(isTracked ? 'tracked' : 'idle');
   const [stake,      setStake]      = useState('1');
   const [savedStake, setSavedStake] = useState('1');
   const [errorMsg,   setErrorMsg]   = useState('');
+
+  // isTracked arrives async (fetched after mount), so sync it once it resolves.
+  useEffect(() => {
+    if (isTracked && phase === 'idle') setPhase('tracked');
+  }, [isTracked, phase]);
 
   async function submit() {
     const units = parseFloat(stake);
@@ -83,6 +89,23 @@ export default function TrackButton({
       setPhase('error');
       setTimeout(() => { setPhase('idle'); setErrorMsg(''); }, 8000);
     }
+  }
+
+  // TRACKED: already in tracked_bets from a previous session
+  if (phase === 'tracked') {
+    return (
+      <span
+        style={{
+          fontFamily:    'var(--font-mono)',
+          fontSize:      '10px',
+          letterSpacing: '2px',
+          textTransform: 'uppercase',
+          color:         'var(--ev-dim)',
+        }}
+      >
+        TRACKED
+      </span>
+    );
   }
 
   // IDLE: single green TRACK button

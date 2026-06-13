@@ -117,7 +117,7 @@ function StatChip({ label, value, sub, color }: { label: string; value: string; 
 
 // ── Component ──────────────────────────────────────────────────────────────
 
-export default function AiPicks({ rows }: { rows: Row[] }) {
+export default function AiPicks({ rows, trackedSet }: { rows: Row[]; trackedSet: Set<string> }) {
   // Opponent lookup: game_id + team_abbr -> opposing team_abbr.
   // Falls back to grouping by game_id for rows written before opp_team existed.
   const opponents = useMemo(() => {
@@ -247,6 +247,7 @@ export default function AiPicks({ rows }: { rows: Row[] }) {
                   adjProb={row.adj_prob}
                   trackedOdds={row.best_odds}
                   trackedEdge={row.edge}
+                  isTracked={trackedSet.has(`${toISODate(row.game_date)}-${row.batter}`)}
                 />
               </div>
             </div>

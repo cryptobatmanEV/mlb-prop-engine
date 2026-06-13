@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, Fragment } from 'react';
+import { useState, useMemo, useEffect, Fragment } from 'react';
 import TrackButton from './TrackButton';
 import AiPicks from './AiPicks';
 
@@ -561,6 +561,25 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
   const [expandedBatter,  setExpandedBatter]  = useState<number | null>(null);
   const [searchQuery,     setSearchQuery]     = useState('');
   const [viewMode,        setViewMode]        = useState<'edge' | 'game' | 'ai'>('edge');
+  const [trackedSet,      setTrackedSet]      = useState<Set<string>>(new Set());
+
+  // Fetch already-tracked (game_date, batter) pairs so TRACK buttons can
+  // render as TRACKED for plays the user has already logged.
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/tracked')
+      .then(res => res.json())
+      .then(data => {
+        if (cancelled || !Array.isArray(data.bets)) return;
+        const set = new Set<string>(
+          data.bets.map((b: { game_date: unknown; batter: unknown }) =>
+            `${toISODate(b.game_date)}-${String(b.batter)}`)
+        );
+        setTrackedSet(set);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   function handleSort(key: SortKey | null) {
     if (!key) return;
@@ -731,7 +750,7 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
       </div>
 
       {/* AI Picks */}
-      {viewMode === 'ai' && <AiPicks rows={rows} />}
+      {viewMode === 'ai' && <AiPicks rows={rows} trackedSet={trackedSet} />}
 
       {/* Table */}
       {viewMode !== 'ai' && (
@@ -1014,6 +1033,7 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                         adjProb={row.adj_prob}
                         trackedOdds={trackedOdds}
                         trackedEdge={trackedEdge}
+                        isTracked={trackedSet.has(`${toISODate(row.game_date)}-${row.batter}`)}
                       />
                     </td>
 
