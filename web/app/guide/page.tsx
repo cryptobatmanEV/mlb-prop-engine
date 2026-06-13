@@ -37,7 +37,7 @@ const DEF: React.CSSProperties = {
 const GLOSSARY: { term: string; def: string }[] = [
   {
     term: 'ADJ%',
-    def: "Model's predicted probability the batter hits a HR today, adjusted for contact rate (K% and BB%). Higher = more likely.",
+    def: "Model's predicted probability the batter hits a HR today. Higher = more likely.",
   },
   {
     term: 'FAIR',
@@ -49,7 +49,7 @@ const GLOSSARY: { term: string; def: string }[] = [
   },
   {
     term: 'EDGE',
-    def: "adj_prob minus the book's implied probability. Green = model sees more value than the book. Red = book is already priced above the model's estimate. This is the key column for finding +EV plays.",
+    def: "The model's edge over the book's price. Green = model sees more value than the book. Red = book is already priced above the model's estimate. This is the key column for finding +EV plays.",
   },
   {
     term: 'MY LINE',
@@ -112,9 +112,9 @@ export default function GuidePage() {
         <div style={{ ...CARD, padding: '20px 24px', marginBottom: '24px' }}>
           <div style={{ ...LABEL, marginBottom: '10px' }}>HOW IT WORKS</div>
           <p style={{ ...DEF, margin: 0, color: 'var(--ev-muted)' }}>
-            Statcast-driven HR probabilities compared against live book prices. The model uses
-            rolling barrel rate, exit velocity, hard-hit rate, xwOBA, xSLG, flyball rate, platoon
-            splits, pitcher FIP, park factors, and weather to score every confirmed MLB starter.
+            Our proprietary AI model analyzes Statcast batted-ball data, pitcher matchups, park
+            factors, and real-time conditions to identify the hitters most likely to homer.
+            Updated daily with confirmed lineups.
           </p>
         </div>
 
