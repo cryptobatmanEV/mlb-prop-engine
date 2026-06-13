@@ -11,6 +11,8 @@ export type TrackedBet = {
   hit_hr:       boolean | null;
   settled:      boolean;
   created_at:   string;
+  discord_user_id:  string | null;
+  discord_username: string | null;
 };
 
 // Postgres DATE columns come back from Neon as JS Date objects, not strings.

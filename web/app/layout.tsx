@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { IBM_Plex_Mono, Syne } from 'next/font/google';
+import Providers from './components/Providers';
 import './globals.css';
 
 const ibmPlexMono = IBM_Plex_Mono({
@@ -25,7 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className={`${ibmPlexMono.variable} ${syne.variable} font-mono`}>
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

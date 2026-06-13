@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
 import { getDb } from '@/lib/db';
+import { authOptions } from '@/lib/auth';
 
 export async function GET() {
   try {
@@ -20,12 +22,29 @@ export async function GET() {
         hit_hr       BOOLEAN     DEFAULT NULL,
         settled      BOOLEAN     NOT NULL DEFAULT false,
         created_at   TIMESTAMPTZ DEFAULT NOW(),
+        discord_user_id  TEXT,
+        discord_username TEXT,
         UNIQUE (game_date, batter)
       )
     `;
+    await sql`ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS discord_user_id TEXT`;
+    await sql`ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS discord_username TEXT`;
+
+    const session = await getServerSession(authOptions);
+    const discordUserId = session?.user?.id ?? null;
+
+    // Not logged in: no personal tracked plays to show.
+    if (!discordUserId) {
+      const emptyStats = {
+        total_bets: 0, settled_bets: 0, wins: 0,
+        settled_staked: 0, total_profit: 0,
+      };
+      return NextResponse.json({ bets: [], stats: emptyStats });
+    }
 
     const bets = await sql`
       SELECT * FROM tracked_bets
+      WHERE discord_user_id = ${discordUserId}
       ORDER BY created_at DESC
     `;
 
@@ -42,6 +61,7 @@ export async function GET() {
           ELSE 0
         END), 0)::float AS total_profit
       FROM tracked_bets
+      WHERE discord_user_id = ${discordUserId}
     `;
 
     return NextResponse.json({ bets, stats: stats[0] });

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
 import { getDb } from '@/lib/db';
+import { authOptions } from '@/lib/auth';
 
 export async function POST(req: NextRequest) {
   try {
@@ -31,25 +33,35 @@ export async function POST(req: NextRequest) {
         hit_hr       BOOLEAN     DEFAULT NULL,
         settled      BOOLEAN     NOT NULL DEFAULT false,
         created_at   TIMESTAMPTZ DEFAULT NOW(),
+        discord_user_id  TEXT,
+        discord_username TEXT,
         UNIQUE (game_date, batter)
       )
     `;
+    await sql`ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS discord_user_id TEXT`;
+    await sql`ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS discord_username TEXT`;
+
+    const session = await getServerSession(authOptions);
+    const discordUserId   = session?.user?.id ?? null;
+    const discordUsername = session?.user?.username ?? null;
 
     const result = await sql`
       INSERT INTO tracked_bets
-        (game_date, batter, player_name, team_abbr, adj_prob, tracked_odds, edge, stake_units, settled)
+        (game_date, batter, player_name, team_abbr, adj_prob, tracked_odds, edge, stake_units, settled, discord_user_id, discord_username)
       VALUES
         (${game_date}, ${batter}, ${player_name ?? null}, ${team_abbr ?? null},
-         ${adj_prob ?? null}, ${tracked_odds ?? null}, ${edge ?? null}, ${stake_units}, false)
+         ${adj_prob ?? null}, ${tracked_odds ?? null}, ${edge ?? null}, ${stake_units}, false, ${discordUserId}, ${discordUsername})
       ON CONFLICT (game_date, batter) DO UPDATE SET
-        player_name  = EXCLUDED.player_name,
-        adj_prob     = EXCLUDED.adj_prob,
-        tracked_odds = EXCLUDED.tracked_odds,
-        edge         = EXCLUDED.edge,
-        stake_units  = EXCLUDED.stake_units,
-        hit_hr       = NULL,
-        settled      = false,
-        created_at   = NOW()
+        player_name      = EXCLUDED.player_name,
+        adj_prob          = EXCLUDED.adj_prob,
+        tracked_odds      = EXCLUDED.tracked_odds,
+        edge              = EXCLUDED.edge,
+        stake_units       = EXCLUDED.stake_units,
+        hit_hr            = NULL,
+        settled           = false,
+        created_at        = NOW(),
+        discord_user_id   = EXCLUDED.discord_user_id,
+        discord_username  = EXCLUDED.discord_username
       RETURNING id
     `;
 
