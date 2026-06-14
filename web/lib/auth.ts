@@ -6,6 +6,12 @@ export const authOptions: NextAuthOptions = {
     DiscordProvider({
       clientId:     process.env.DISCORD_CLIENT_ID!,
       clientSecret: process.env.DISCORD_CLIENT_SECRET!,
+      // Sign-in is started via a plain <a href> link to Discord's OAuth URL
+      // (built in tracker/page.tsx) instead of NextAuth's signIn(), so that
+      // mobile in-app browsers — which block JS-triggered redirects — allow
+      // it. That bypasses the cookies NextAuth normally sets when it builds
+      // the authorization URL, so the matching checks are disabled here.
+      checks: [],
     }),
   ],
   session: {
@@ -30,6 +36,11 @@ export const authOptions: NextAuthOptions = {
         session.user.image = (token.discordAvatar as string | undefined) ?? session.user.image;
       }
       return session;
+    },
+    // No callback-url cookie is set (sign-in starts from a plain link, not
+    // signIn()), so send users back to the tracker page after login.
+    async redirect({ baseUrl }) {
+      return `${baseUrl}/tracker`;
     },
   },
 };
