@@ -428,6 +428,31 @@ def _best_lines(all_df):
             .first())
 
 
+def refresh_context_columns(existing_df, pred_df, date_str):
+    """
+    Refresh time-sensitive context columns (season_hr, days_since_hr, recent_hr)
+    on already-priced players using today's freshly recomputed predictions.
+
+    Without this, a player priced earlier in the day keeps the days_since_hr /
+    recent_hr values from that earlier run even after the Statcast store picks
+    up a new HR -- the odds/edge for that player are left untouched (no extra
+    OddsAPI credits spent).
+    """
+    if existing_df.empty:
+        return existing_df
+
+    refresh_cols = [c for c in ('season_hr', 'days_since_hr') if c in pred_df.columns]
+    if refresh_cols:
+        fresh = pred_df[['game_id', 'batter'] + refresh_cols].drop_duplicates(['game_id', 'batter'])
+        existing_df = existing_df.drop(columns=refresh_cols, errors='ignore')
+        existing_df = existing_df.merge(fresh, on=['game_id', 'batter'], how='left')
+
+    hot = fetch_recent_hr_batters(date_str, set(existing_df['batter']))
+    existing_df['recent_hr'] = existing_df['batter'].isin(hot).astype(int)
+
+    return existing_df
+
+
 def fetch_recent_hr_batters(date_str, batter_ids):
     """
     Returns the subset of batter_ids who hit >= 1 HR in their last 5 games
@@ -671,6 +696,7 @@ def run(date_str=None):
     print("\n[1] Loading predictions and existing output...")
     pred_df = load_predictions(date_str)
     existing_df, already_priced_pks = load_existing_output(date_str)
+    existing_df = refresh_context_columns(existing_df, pred_df, date_str)
 
     # [2] Schedule with game states
     print("\n[2] Fetching schedule and game states...")
@@ -737,14 +763,11 @@ def run(date_str=None):
                     for info in lineups_by_game.values():
                         combined_bo.update(info.get('batting_order', {}))
                     existing_df['bat_order'] = existing_df['batter'].map(combined_bo)
-                # recent_hr from batter_features
-                if 'recent_hr' not in existing_df.columns:
-                    hot = fetch_recent_hr_batters(date_str, set(existing_df['batter']))
-                    existing_df['recent_hr'] = existing_df['batter'].isin(hot).astype(int)
                 print(f"\n  Enriched existing output with {len(passthrough)} new column(s).")
-                save_output(existing_df, date_str)
             else:
-                print("\n  No new games to price this run -- existing output is up to date.")
+                print("\n  No new games to price this run -- refreshed context columns "
+                      "(days since HR, recent HR, season HR).")
+            save_output(existing_df, date_str)
         print_run_summary(schedule_games, lineups_by_game, already_priced_pks,
                           new_games, credits_events, credits_props, failed_count,
                           credits_remaining, len(already_priced_pks))

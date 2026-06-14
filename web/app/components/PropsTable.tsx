@@ -533,6 +533,14 @@ const STICKY_BG = '#0a0d0f';
 
 type ColDef = { key: SortKey | null; label: string; align: 'left' | 'right'; sticky?: boolean };
 
+// Mobile sort dropdown options — mirrors the most useful desktop sort columns
+const MOBILE_SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: 'adj_prob',       label: 'ADJ%'   },
+  { key: 'edge',           label: 'EDGE'   },
+  { key: 'season_hr',      label: 'SZN HR' },
+  { key: 'hr_park_factor', label: 'PARK'   },
+];
+
 const COLS: ColDef[] = [
   { key: 'player_name',    label: 'PLAYER',  align: 'left',  sticky: true },
   { key: 'bat_order',      label: 'BO',      align: 'right' },
@@ -1053,6 +1061,46 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
             })}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile sort bar */}
+      <div className="mobile-sort-bar" style={{ alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+        <span style={{ ...LABEL, fontSize: '9px', flexShrink: 0 }}>SORT</span>
+        <select
+          value={sortKey}
+          onChange={e => { setSortKey(e.target.value as SortKey); setSortDir('desc'); }}
+          style={{
+            flex:          1,
+            background:    'rgba(255,255,255,0.04)',
+            border:        '1px solid rgba(255,255,255,0.1)',
+            borderRadius:  '2px',
+            color:         'var(--ev-text)',
+            fontFamily:    'var(--font-mono)',
+            fontSize:      '11px',
+            letterSpacing: '1.5px',
+            padding:       '6px 8px',
+            outline:       'none',
+          }}
+        >
+          {MOBILE_SORT_OPTIONS.map(({ key, label }) => (
+            <option key={key} value={key}>{label}</option>
+          ))}
+        </select>
+        <button
+          onClick={() => setSortDir(d => d === 'desc' ? 'asc' : 'desc')}
+          style={{
+            fontFamily:    'var(--font-mono)',
+            fontSize:      '11px',
+            padding:       '6px 12px',
+            borderRadius:  '2px',
+            cursor:        'pointer',
+            background:    'transparent',
+            border:        '1px solid rgba(255,255,255,0.12)',
+            color:         'var(--ev-dim)',
+          }}
+        >
+          {sortDir === 'desc' ? '▼ HIGH-LOW' : '▲ LOW-HIGH'}
+        </button>
       </div>
 
       {/* Mobile card-stack */}

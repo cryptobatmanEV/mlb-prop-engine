@@ -1,0 +1,267 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useSession } from 'next-auth/react';
+import Nav from '../components/Nav';
+import SignInWithDiscord from '../components/SignInWithDiscord';
+import SignOutButton from '../components/SignOutButton';
+import PerformanceCharts, { type PLPoint, type CalibPoint } from './PerformanceCharts';
+import BetsTable from './BetsTable';
+import { type TrackedBet } from './shared';
+
+// ── Types ──────────────────────────────────────────────────────────────────
+
+type TrackerStats = {
+  total_bets:     number;
+  settled_bets:   number;
+  wins:           number;
+  settled_staked: number;
+  total_profit:   number;
+};
+
+type TrackerData = {
+  tracker:   TrackerStats;
+  bets:      TrackedBet[];
+  plData:    PLPoint[];
+  calibData: CalibPoint[];
+};
+
+// ── Formatters ─────────────────────────────────────────────────────────────
+
+function fmtPL(profit: number, settled: number) {
+  if (settled === 0) return '—';
+  return `${profit >= 0 ? '+' : ''}${profit.toFixed(1)}u`;
+}
+
+function fmtROI(profit: number, staked: number) {
+  if (staked === 0) return '—';
+  const pct = (profit / staked) * 100;
+  return `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
+}
+
+// ── Style tokens ───────────────────────────────────────────────────────────
+
+const LABEL: React.CSSProperties = {
+  fontFamily:    'var(--font-mono)',
+  fontSize:      '10px',
+  letterSpacing: '2px',
+  textTransform: 'uppercase',
+  color:         'var(--ev-dim)',
+};
+
+const CARD: React.CSSProperties = {
+  background:   'var(--ev-card)',
+  border:       '1px solid var(--ev-border)',
+  borderRadius: '2px',
+};
+
+// ── Page ───────────────────────────────────────────────────────────────────
+
+export default function TrackerClient() {
+  const { data: session, status } = useSession();
+  const [data, setData] = useState<TrackerData | null>(null);
+  const [dataError, setDataError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (status !== 'authenticated') return;
+    let cancelled = false;
+    fetch('/api/tracker-data')
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((json: TrackerData) => {
+        if (!cancelled) setData(json);
+      })
+      .catch(err => {
+        if (!cancelled) setDataError(err instanceof Error ? err.message : String(err));
+      });
+    return () => { cancelled = true; };
+  }, [status]);
+
+  const header = (
+    <header style={{ marginBottom: '28px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+      <div>
+        <div style={{ ...LABEL, color: 'var(--ev-green)', letterSpacing: '3px', marginBottom: '8px' }}>
+          THE +EV CAVE
+        </div>
+        <h1 style={{
+          fontFamily: 'var(--font-syne)', fontWeight: 800, fontSize: '26px',
+          margin: 0, letterSpacing: '-0.5px', color: 'var(--ev-text)',
+        }}>
+          TRACKER
+        </h1>
+        <div style={{ ...LABEL, color: 'var(--ev-muted)', marginTop: '6px', letterSpacing: '1px' }}>
+          PERFORMANCE HISTORY
+        </div>
+      </div>
+
+      {/* Discord identity */}
+      {status === 'authenticated' && session?.user && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {session.user.image && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={session.user.image}
+              alt={session.user.username ?? session.user.name ?? 'Discord avatar'}
+              width={32}
+              height={32}
+              style={{ borderRadius: '50%', border: '1px solid var(--ev-border)' }}
+            />
+          )}
+          <div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--ev-text)', fontWeight: 600 }}>
+              {session.user.username ?? session.user.name ?? 'Unknown'}
+            </div>
+            <SignOutButton />
+          </div>
+        </div>
+      )}
+    </header>
+  );
+
+  // Not signed in (or session still resolving) — show sign-in UI immediately,
+  // no loading spinner / blocking fetch.
+  if (status !== 'authenticated') {
+    return (
+      <main style={{ minHeight: '100vh', background: 'var(--ev-bg)', padding: '32px 20px 60px' }}>
+        <div style={{ maxWidth: '1380px', margin: '0 auto' }}>
+          {header}
+          <Nav active="tracker" />
+
+          <div style={{ ...CARD, padding: '48px', textAlign: 'center' }}>
+            <div style={{ ...LABEL, color: 'var(--ev-muted)', marginBottom: '16px' }}>
+              SIGN IN TO VIEW YOUR TRACKER
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--ev-dim)', marginBottom: '20px' }}>
+              Sign in with Discord to track your picks and see your personal performance history.
+            </div>
+            <SignInWithDiscord callbackUrl="/tracker" />
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  const tracker     = data?.tracker ?? null;
+  const bets        = data?.bets ?? [];
+  const plData      = data?.plData ?? [];
+  const calibData   = data?.calibData ?? [];
+  const totalBets   = tracker ? Number(tracker.total_bets)     : 0;
+  const settledBets = tracker ? Number(tracker.settled_bets)   : 0;
+  const wins        = tracker ? Number(tracker.wins)           : 0;
+  const staked      = tracker ? Number(tracker.settled_staked) : 0;
+  const profit      = tracker ? Number(tracker.total_profit)   : 0;
+  const winRate     = settledBets > 0 ? (wins / settledBets * 100).toFixed(1) + '%' : '—';
+
+  return (
+    <main style={{ minHeight: '100vh', background: 'var(--ev-bg)', padding: '32px 20px 60px' }}>
+      <div style={{ maxWidth: '1380px', margin: '0 auto' }}>
+        {header}
+
+        {/* Nav */}
+        <Nav active="tracker" />
+
+        {/* Content */}
+        {dataError ? (
+          <div style={{ ...CARD, padding: '48px', textAlign: 'center' }}>
+            <div style={{ ...LABEL, color: 'var(--ev-muted)' }}>
+              Unable to load your tracker right now — please try again shortly.
+            </div>
+          </div>
+        ) : data === null ? (
+          <div style={{ ...CARD, padding: '48px', textAlign: 'center' }}>
+            <div style={{ ...LABEL, color: 'var(--ev-muted)' }}>
+              LOADING YOUR TRACKER&hellip;
+            </div>
+          </div>
+        ) : totalBets === 0 ? (
+          <div style={{ ...CARD, padding: '48px', textAlign: 'center' }}>
+            <div style={{ ...LABEL, color: 'var(--ev-muted)', marginBottom: '6px' }}>NO BETS TRACKED YET</div>
+            <div style={{ fontSize: '11px', color: 'var(--ev-dim)' }}>
+              Hit TRACK on any play from the CARD page to start.
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Stats grid */}
+            <div style={{
+              display:             'grid',
+              gridTemplateColumns: 'repeat(4, 1fr)',
+              gap:                 '1px',
+              background:          'var(--ev-border)',
+              border:              '1px solid var(--ev-border)',
+              borderRadius:        '2px',
+              overflow:            'hidden',
+              marginBottom:        '16px',
+            }}>
+              {([
+                {
+                  label: 'BETS',
+                  value: String(totalBets),
+                  sub:   totalBets - settledBets > 0
+                    ? `${totalBets - settledBets} PENDING`
+                    : 'ALL SETTLED',
+                  color: 'var(--ev-text)',
+                },
+                {
+                  label: 'WIN RATE',
+                  value: winRate,
+                  sub:   settledBets > 0 ? `${wins}W / ${settledBets - wins}L` : `${settledBets} SETTLED`,
+                  color: 'var(--ev-text)',
+                },
+                {
+                  label: 'P/L',
+                  value: fmtPL(profit, settledBets),
+                  sub:   `${settledBets} SETTLED`,
+                  color: settledBets === 0
+                    ? 'var(--ev-dim)'
+                    : profit >= 0 ? 'var(--ev-green)' : 'var(--ev-red)',
+                },
+                {
+                  label: 'ROI',
+                  value: fmtROI(profit, staked),
+                  sub:   `${staked.toFixed(1)}u STAKED`,
+                  color: staked === 0
+                    ? 'var(--ev-dim)'
+                    : profit >= 0 ? 'var(--ev-green)' : 'var(--ev-red)',
+                },
+              ] as { label: string; value: string; sub: string; color: string }[]).map(
+                ({ label, value, sub, color }) => (
+                  <div key={label} style={{ background: 'var(--ev-bg)', padding: '16px 18px' }}>
+                    <div style={LABEL}>{label}</div>
+                    <div style={{
+                      fontFamily: 'var(--font-syne)', fontWeight: 800,
+                      fontSize: '22px', color, margin: '8px 0 4px', letterSpacing: '-0.5px',
+                    }}>
+                      {value}
+                    </div>
+                    <div style={{ ...LABEL, fontSize: '9px' }}>{sub}</div>
+                  </div>
+                )
+              )}
+            </div>
+
+            {/* Performance charts */}
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ ...LABEL, letterSpacing: '3px', marginBottom: '12px' }}>
+                PERFORMANCE
+              </div>
+              <PerformanceCharts plData={plData} calibData={calibData} />
+            </div>
+
+            {/* Bets table */}
+            <BetsTable bets={bets} />
+          </>
+        )}
+
+        {/* Footer */}
+        <div style={{ ...LABEL, textAlign: 'center', marginTop: '40px', fontSize: '9px', color: 'rgba(255,255,255,0.15)' }}>
+          P/L SETTLES AFTER GAMES ARE FINAL &nbsp;&middot;&nbsp;
+          EDGE = MODEL VS BOOK PRICE &nbsp;&middot;&nbsp;
+          RESULTS UPDATED DAILY
+        </div>
+      </div>
+    </main>
+  );
+}

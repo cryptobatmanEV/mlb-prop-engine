@@ -63,9 +63,13 @@ input::placeholder { color: var(--ev-dim); opacity: 1; }
 .mobile-card-list { display: none; }
 .mobile-pred-card:active { background: rgba(255, 255, 255, 0.04); }
 
+/* Mobile sort bar (above mobile-card-list) */
+.mobile-sort-bar { display: none; }
+
 @media (max-width: 768px) {
   .desktop-table-wrap { display: none; }
   .mobile-card-list   { display: block; }
+  .mobile-sort-bar    { display: flex; }
 
   /* AI Picks: single full-width column on mobile */
   .ai-picks-grid { grid-template-columns: 1fr !important; }
