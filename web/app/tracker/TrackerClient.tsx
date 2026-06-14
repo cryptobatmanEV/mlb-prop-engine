@@ -61,6 +61,7 @@ export default function TrackerClient() {
   const { data: session, status } = useSession();
   const [data, setData] = useState<TrackerData | null>(null);
   const [dataError, setDataError] = useState<string | null>(null);
+  const [slowLoad, setSlowLoad] = useState(false);
 
   useEffect(() => {
     if (status !== 'authenticated') return;
@@ -78,6 +79,17 @@ export default function TrackerClient() {
       });
     return () => { cancelled = true; };
   }, [status]);
+
+  // After 10s of waiting on the DB, let the user know the wait is normal
+  // (Neon cold-starts can take a couple minutes on first sign-in).
+  useEffect(() => {
+    if (status !== 'authenticated' || data !== null || dataError !== null) {
+      setSlowLoad(false);
+      return;
+    }
+    const timer = setTimeout(() => setSlowLoad(true), 10000);
+    return () => clearTimeout(timer);
+  }, [status, data, dataError]);
 
   const header = (
     <header style={{ marginBottom: '28px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
@@ -171,9 +183,15 @@ export default function TrackerClient() {
           </div>
         ) : data === null ? (
           <div style={{ ...CARD, padding: '48px', textAlign: 'center' }}>
+            <div className="ev-spinner" style={{ marginBottom: '16px' }} />
             <div style={{ ...LABEL, color: 'var(--ev-muted)' }}>
               LOADING YOUR TRACKER&hellip;
             </div>
+            {slowLoad && (
+              <div style={{ fontSize: '11px', color: 'var(--ev-dim)', marginTop: '12px' }}>
+                Still loading — this can take a moment on first sign-in.
+              </div>
+            )}
           </div>
         ) : totalBets === 0 ? (
           <div style={{ ...CARD, padding: '48px', textAlign: 'center' }}>
