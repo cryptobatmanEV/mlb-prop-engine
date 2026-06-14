@@ -215,7 +215,7 @@ export default function TrackButton({
         verticalAlign: 'bottom',
       }}
     >
-      ERROR: {errorMsg || 'unknown'}
+      Couldn&rsquo;t save — try again
     </span>
   );
 }

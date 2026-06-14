@@ -520,7 +520,7 @@ const LABEL: React.CSSProperties = {
 
 const TH_BASE: React.CSSProperties = {
   ...LABEL,
-  padding:    '10px 12px',
+  padding:    '10px var(--cell-px)',
   fontWeight:  500,
   background: 'rgba(255,255,255,0.02)',
   userSelect: 'none',
@@ -754,7 +754,8 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
 
       {/* Table */}
       {viewMode !== 'ai' && (
-      <div style={{
+      <>
+      <div className="desktop-table-wrap" style={{
         background: 'var(--ev-card)', border: '1px solid var(--ev-border)',
         borderRadius: '2px', overflowX: 'auto',
       }}>
@@ -850,7 +851,7 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
 
                     {/* PLAYER — sticky */}
                     <td style={{
-                      padding:     '9px 12px',
+                      padding:     '9px var(--cell-px)',
                       color:       'var(--ev-text)',
                       fontWeight:  500,
                       position:    'sticky',
@@ -900,13 +901,13 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                     </td>
 
                     {/* BO */}
-                    <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ev-dim)', fontSize: '11px' }}>
+                    <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', color: 'var(--ev-dim)', fontSize: '11px' }}>
                       {row.bat_order ?? '—'}
                     </td>
 
                     {/* H/A */}
                     <td style={{
-                      padding:   '9px 12px',
+                      padding:   '9px var(--cell-px)',
                       textAlign: 'right',
                       fontSize:  '11px',
                       color:     row.is_home === 'H' ? 'var(--ev-green)' : 'var(--ev-muted)',
@@ -915,7 +916,7 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                     </td>
 
                     {/* TEAM */}
-                    <td style={{ padding: '9px 12px', color: 'var(--ev-muted)' }}>
+                    <td style={{ padding: '9px var(--cell-px)', color: 'var(--ev-muted)' }}>
                       {row.team_abbr}
                       {row.stand && (
                         <span style={{ color: 'var(--ev-dim)', marginLeft: '5px', fontSize: '10px' }}>
@@ -925,7 +926,7 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                     </td>
 
                     {/* VS */}
-                    <td style={{ padding: '9px 12px', color: 'var(--ev-dim)', fontSize: '11px' }}>
+                    <td style={{ padding: '9px var(--cell-px)', color: 'var(--ev-dim)', fontSize: '11px' }}>
                       {row.pitcher_name ?? 'TBD'}
                       {row.p_throws && (
                         <span style={{ color: 'rgba(255,255,255,0.2)', marginLeft: '3px' }}>
@@ -935,22 +936,22 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                     </td>
 
                     {/* ADJ% */}
-                    <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ev-text)', fontWeight: 500 }}>
+                    <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', color: 'var(--ev-text)', fontWeight: 500 }}>
                       {fmtProb(row.adj_prob)}
                     </td>
 
                     {/* SZN HR */}
-                    <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ev-dim)', fontSize: '11px' }}>
+                    <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', color: 'var(--ev-dim)', fontSize: '11px' }}>
                       {row.season_hr ?? '—'}
                     </td>
 
                     {/* FAIR */}
-                    <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ev-dim)' }}>
+                    <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', color: 'var(--ev-dim)' }}>
                       {fmtOdds(row.fair_odds)}
                     </td>
 
                     {/* BOOK */}
-                    <td style={{ padding: '9px 12px', textAlign: 'right' }}>
+                    <td style={{ padding: '9px var(--cell-px)', textAlign: 'right' }}>
                       {row.has_line ? (
                         <>
                           <span style={{ color: 'var(--ev-blue)' }}>{fmtOdds(row.best_odds)}</span>
@@ -1001,22 +1002,22 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                     </td>
 
                     {/* EDGE */}
-                    <td style={{ padding: '9px 12px', textAlign: 'right', color: edgeColor, fontWeight: edgeWeight }}>
+                    <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', color: edgeColor, fontWeight: edgeWeight }}>
                       {edgeText}
                     </td>
 
                     {/* O/U */}
-                    <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ev-dim)', fontSize: '11px' }}>
+                    <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', color: 'var(--ev-dim)', fontSize: '11px' }}>
                       {row.game_total != null ? row.game_total : '—'}
                     </td>
 
                     {/* PARK */}
-                    <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ev-dim)', fontSize: '11px' }}>
+                    <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', color: 'var(--ev-dim)', fontSize: '11px' }}>
                       {row.hr_park_factor != null ? Math.round(row.hr_park_factor) : '—'}
                     </td>
 
                     {/* WIND */}
-                    <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ev-dim)', fontSize: '11px' }}>
+                    <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', color: 'var(--ev-dim)', fontSize: '11px' }}>
                       {fmtWind(row.wind_favor, row.is_dome)}
                     </td>
 
@@ -1053,6 +1054,138 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
           </tbody>
         </table>
       </div>
+
+      {/* Mobile card-stack */}
+      <div className="mobile-card-list">
+        {tableItems.map(item => {
+          if (item.type === 'header') {
+            return (
+              <div key={`m-hdr-${item.gameId}`} style={{
+                padding:       '8px 2px',
+                marginBottom:  '8px',
+                fontFamily:    'var(--font-mono)',
+                fontSize:      '10px',
+                letterSpacing: '2.5px',
+                textTransform: 'uppercase',
+                color:         'var(--ev-text)',
+              }}>
+                {item.label}
+                <span style={{ color: 'var(--ev-dim)', marginLeft: '12px', letterSpacing: '1px', fontSize: '9px' }}>
+                  {item.count} STARTERS
+                </span>
+              </div>
+            );
+          }
+
+          const row = item.row;
+          const isExpanded = expandedBatter === row.batter;
+          const { text: edgeText, color: edgeColor, weight: edgeWeight } =
+            edgeDisplay(row.edge, row.has_line);
+
+          return (
+            <Fragment key={`m-${row.game_id}-${row.batter}`}>
+              <div
+                className="mobile-pred-card"
+                onClick={() => toggleExpand(row.batter)}
+                style={{
+                  background:   'var(--ev-card)',
+                  border:       '1px solid var(--ev-border)',
+                  borderRadius: '2px',
+                  padding:      '12px 14px',
+                  marginBottom: '8px',
+                  cursor:       'pointer',
+                }}
+              >
+                {/* Name / matchup */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', marginBottom: '10px' }}>
+                  <div>
+                    <div style={{
+                      fontFamily: 'var(--font-syne)', fontWeight: 800, fontSize: '14px',
+                      color: 'var(--ev-text)', letterSpacing: '-0.3px',
+                    }}>
+                      {row.player_name}
+                      {row.hit_hr === true && (
+                        <span style={{
+                          marginLeft: '7px', fontSize: '9px', letterSpacing: '1px', color: '#0a0d0f',
+                          background: 'var(--ev-green)', borderRadius: '2px', padding: '1px 4px', fontWeight: 700,
+                        }}>
+                          HR
+                        </span>
+                      )}
+                      {row.recent_hr === 1 && row.hit_hr !== true && (
+                        <span
+                          title="Hit a HR in last 5 games"
+                          style={{
+                            display: 'inline-block', marginLeft: '6px', width: '6px', height: '6px',
+                            borderRadius: '50%', background: 'var(--ev-gold)', verticalAlign: 'middle',
+                          }}
+                        />
+                      )}
+                    </div>
+                    <div style={{ ...LABEL, fontSize: '9px', marginTop: '3px' }}>
+                      {row.team_abbr} {row.is_home === 'H' ? 'vs' : '@'} {row.pitcher_name ?? 'TBD'}
+                      {row.p_throws && ` (${row.p_throws})`}
+                    </div>
+                  </div>
+                  <span style={{
+                    fontSize: '9px',
+                    color: isExpanded ? 'var(--ev-green)' : 'var(--ev-dim)',
+                    transition: 'transform 0.15s',
+                    transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                    flexShrink: 0,
+                  }}>▶</span>
+                </div>
+
+                {/* Stats + TRACK */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '10px' }}>
+                  <div style={{ display: 'flex', gap: '18px' }}>
+                    <div>
+                      <div style={{ ...LABEL, fontSize: '9px', marginBottom: '3px' }}>ADJ%</div>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', fontWeight: 500, color: 'var(--ev-text)' }}>
+                        {fmtProb(row.adj_prob)}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ ...LABEL, fontSize: '9px', marginBottom: '3px' }}>ODDS</div>
+                      <div style={{
+                        fontFamily: 'var(--font-mono)', fontSize: '13px', fontWeight: 500,
+                        color: row.has_line ? 'var(--ev-blue)' : 'var(--ev-dim)',
+                      }}>
+                        {row.has_line ? fmtOdds(row.best_odds) : '—'}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ ...LABEL, fontSize: '9px', marginBottom: '3px' }}>EDGE</div>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', fontWeight: edgeWeight, color: edgeColor }}>
+                        {edgeText}
+                      </div>
+                    </div>
+                  </div>
+                  <div onClick={e => e.stopPropagation()}>
+                    <TrackButton
+                      gameDate={toISODate(row.game_date)}
+                      batter={row.batter}
+                      playerName={row.player_name}
+                      teamAbbr={row.team_abbr}
+                      adjProb={row.adj_prob}
+                      trackedOdds={row.best_odds}
+                      trackedEdge={row.edge}
+                      isTracked={trackedSet.has(`${toISODate(row.game_date)}-${row.batter}`)}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {isExpanded && (
+                <div style={{ marginBottom: '8px', border: '1px solid var(--ev-border)', borderRadius: '2px' }}>
+                  <DetailCard row={row} />
+                </div>
+              )}
+            </Fragment>
+          );
+        })}
+      </div>
+      </>
       )}
     </div>
   );

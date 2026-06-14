@@ -72,6 +72,8 @@ export default async function Home({
     }
   } catch (err) {
     dbError = err instanceof Error ? err.message : String(err);
+    // eslint-disable-next-line no-console
+    console.error('[page] DB error:', dbError);
   }
 
   const withLine = rows.filter(r => r.has_line).length;
@@ -118,37 +120,15 @@ export default async function Home({
         <DateNav date={validDate} today={todayISO} />
 
         {/* Predictions table */}
-        {dbError ? (
-          <div style={{ ...CARD, padding: '40px', textAlign: 'center' }}>
-            <div style={{ ...LABEL, color: 'var(--ev-muted)', marginBottom: '8px' }}>NO DATA LOADED</div>
-            <div style={{ fontSize: '11px', color: 'var(--ev-dim)', marginBottom: '8px' }}>
-              Check DATABASE_URL in Vercel environment variables.
-            </div>
-            <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.15)', wordBreak: 'break-all' }}>
-              {dbError}
-            </div>
-          </div>
-        ) : rows.length === 0 ? (
+        {dbError || rows.length === 0 ? (
           <div style={{ ...CARD, padding: '48px', textAlign: 'center' }}>
-            {isBeforeLineups ? (
-              <>
-                <div style={{ ...LABEL, color: 'var(--ev-muted)', marginBottom: '8px', fontSize: '11px', letterSpacing: '3px' }}>
-                  LINEUPS NOT POSTED YET
-                </div>
-                <div style={{ fontSize: '11px', color: 'var(--ev-dim)' }}>
-                  MLB lineups typically post around 3 PM ET. Run the pipeline after they drop.
-                </div>
-              </>
-            ) : (
-              <>
-                <div style={{ ...LABEL, color: 'var(--ev-muted)', marginBottom: '8px' }}>
-                  NO PREDICTIONS YET
-                </div>
-                <div style={{ fontSize: '11px', color: 'var(--ev-dim)' }}>
-                  <code style={{ fontFamily: 'var(--font-mono)' }}>python scripts/daily_pipeline.py</code>
-                </div>
-              </>
-            )}
+            <div style={{ ...LABEL, color: 'var(--ev-muted)' }}>
+              {dbError
+                ? 'No plays available for this date'
+                : isBeforeLineups
+                  ? "Today's card is loading — plays appear as lineups are confirmed"
+                  : 'No plays available for this date'}
+            </div>
           </div>
         ) : (
           <PropsTable rows={rows} />
@@ -165,9 +145,9 @@ export default async function Home({
 
         {/* Footer */}
         <div style={{ ...LABEL, textAlign: 'center', marginTop: '40px', fontSize: '9px', color: 'rgba(255,255,255,0.15)' }}>
-          ADJ% = MODEL PROB x P(CONTACT) &nbsp;&middot;&nbsp;
-          EDGE = ADJ% - BOOK IMPLIED &nbsp;&middot;&nbsp;
-          P/L SETTLES AFTER LOG RUN
+          ADJ% = HR PROBABILITY &nbsp;&middot;&nbsp;
+          EDGE = MODEL VS BOOK PRICE &nbsp;&middot;&nbsp;
+          P/L SETTLES AFTER GAMES ARE FINAL
         </div>
 
       </div>

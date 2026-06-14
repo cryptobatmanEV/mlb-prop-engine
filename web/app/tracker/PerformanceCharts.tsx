@@ -73,7 +73,7 @@ export default function PerformanceCharts({ plData, calibData }: Props) {
   if (plData.length === 0 && calibData.length === 0) {
     return (
       <div style={{ ...cardStyle, textAlign: 'center', padding: '36px', color: DIM, fontSize: '11px', fontFamily: MONO }}>
-        SETTLE SOME BETS TO SEE PERFORMANCE CHARTS
+        Performance charts appear after your first settled play
       </div>
     );
   }

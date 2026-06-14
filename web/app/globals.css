@@ -15,6 +15,12 @@
   --ev-text:    #ffffff;
   --ev-muted:   rgba(255, 255, 255, 0.4);
   --ev-dim:     rgba(255, 255, 255, 0.3);
+  --cell-px:    12px;
+}
+
+/* Narrower screens still showing the desktop table get tighter cell padding */
+@media (max-width: 1024px) {
+  :root { --cell-px: 6px; }
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -51,4 +57,32 @@ input::placeholder { color: var(--ev-dim); opacity: 1; }
   align-items: center;
   justify-content: center;
   z-index: 50;
+}
+
+/* Mobile card-stack table layout (PropsTable) */
+.mobile-card-list { display: none; }
+.mobile-pred-card:active { background: rgba(255, 255, 255, 0.04); }
+
+@media (max-width: 768px) {
+  .desktop-table-wrap { display: none; }
+  .mobile-card-list   { display: block; }
+
+  /* AI Picks: single full-width column on mobile */
+  .ai-picks-grid { grid-template-columns: 1fr !important; }
+}
+
+/* Horizontal-scroll hint for narrow tables (e.g. tracker bets) */
+.scroll-hint { display: none; }
+
+@media (max-width: 768px) {
+  .scroll-hint {
+    display:       block;
+    text-align:    center;
+    font-family:   var(--font-mono);
+    font-size:     9px;
+    letter-spacing: 2px;
+    color:         var(--ev-dim);
+    padding:       6px 0;
+    border-bottom: 1px solid var(--ev-border);
+  }
 }

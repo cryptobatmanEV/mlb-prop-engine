@@ -19,7 +19,7 @@ const CARD: React.CSSProperties = {
 
 const TH: React.CSSProperties = {
   ...LABEL,
-  padding:    '8px 14px',
+  padding:    '8px var(--cell-px)',
   fontWeight:  500,
   background: 'rgba(255,255,255,0.02)',
 };
@@ -56,6 +56,7 @@ export default function BetsTable({ bets: initialBets }: { bets: TrackedBet[] })
 
   return (
     <div style={{ ...CARD, overflowX: 'auto' }}>
+      <div className="scroll-hint">&larr; SWIPE FOR MORE &rarr;</div>
       <table style={{
         width: '100%', borderCollapse: 'collapse',
         fontFamily: 'var(--font-mono)', fontSize: '11px',
@@ -80,28 +81,28 @@ export default function BetsTable({ bets: initialBets }: { bets: TrackedBet[] })
             const deleting  = deletingId === bet.id;
             return (
               <tr key={bet.id} className="bet-row" style={{ borderBottom: '1px solid var(--ev-border)' }}>
-                <td style={{ padding: '9px 14px', color: 'var(--ev-dim)' }}>{fmtDate(bet.game_date)}</td>
-                <td style={{ padding: '9px 14px', color: 'var(--ev-text)' }}>{bet.player_name}</td>
-                <td style={{ padding: '9px 14px', color: 'var(--ev-muted)' }}>{bet.team_abbr}</td>
-                <td style={{ padding: '9px 14px', textAlign: 'right', color: 'var(--ev-blue)' }}>
+                <td style={{ padding: '9px var(--cell-px)', color: 'var(--ev-dim)' }}>{fmtDate(bet.game_date)}</td>
+                <td style={{ padding: '9px var(--cell-px)', color: 'var(--ev-text)' }}>{bet.player_name}</td>
+                <td style={{ padding: '9px var(--cell-px)', color: 'var(--ev-muted)' }}>{bet.team_abbr}</td>
+                <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', color: 'var(--ev-blue)' }}>
                   {fmtOdds(bet.tracked_odds)}
                 </td>
-                <td style={{ padding: '9px 14px', textAlign: 'right', color: 'var(--ev-muted)' }}>
+                <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', color: 'var(--ev-muted)' }}>
                   {bet.stake_units}u
                 </td>
-                <td style={{ padding: '9px 14px', textAlign: 'right', color: edgeCol }}>
+                <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', color: edgeCol }}>
                   {edgeText}
                 </td>
-                <td style={{ padding: '9px 14px', textAlign: 'right', color: plColor }}>
+                <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', color: plColor }}>
                   {pl}
                 </td>
                 <td style={{
-                  padding: '9px 14px', textAlign: 'right',
+                  padding: '9px var(--cell-px)', textAlign: 'right',
                   color: resColor, fontWeight: bet.hit_hr != null ? 600 : 400,
                 }}>
                   {result}
                 </td>
-                <td style={{ padding: '9px 14px', textAlign: 'right' }}>
+                <td style={{ padding: '9px var(--cell-px)', textAlign: 'right' }}>
                   <button
                     onClick={() => handleDelete(bet.id)}
                     disabled={deleting}

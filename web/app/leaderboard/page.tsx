@@ -91,6 +91,8 @@ export default async function LeaderboardPage() {
     `) as LeaderboardRow[];
   } catch (err) {
     dbError = err instanceof Error ? err.message : String(err);
+    // eslint-disable-next-line no-console
+    console.error('[leaderboard] DB error:', dbError);
   }
 
   return (
@@ -118,10 +120,9 @@ export default async function LeaderboardPage() {
 
         {/* Content */}
         {dbError ? (
-          <div style={{ ...CARD, padding: '40px', textAlign: 'center' }}>
-            <div style={{ ...LABEL, color: 'var(--ev-muted)', marginBottom: '8px' }}>DATABASE ERROR</div>
-            <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.15)', wordBreak: 'break-all' }}>
-              {dbError}
+          <div style={{ ...CARD, padding: '48px', textAlign: 'center' }}>
+            <div style={{ ...LABEL, color: 'var(--ev-muted)' }}>
+              Unable to load the leaderboard right now — please try again shortly.
             </div>
           </div>
         ) : rows.length === 0 ? (
@@ -184,7 +185,7 @@ export default async function LeaderboardPage() {
 
         {/* Footer */}
         <div style={{ ...LABEL, textAlign: 'center', marginTop: '40px', fontSize: '9px', color: 'rgba(255,255,255,0.15)' }}>
-          P/L SETTLES AFTER LOG RUN &nbsp;&middot;&nbsp;
+          P/L SETTLES AFTER GAMES ARE FINAL &nbsp;&middot;&nbsp;
           ROI = TOTAL P/L &divide; TOTAL STAKED ON SETTLED BETS
         </div>
 

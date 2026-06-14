@@ -166,7 +166,7 @@ export default function AiPicks({ rows, trackedSet }: { rows: Row[]; trackedSet:
       <div style={{ ...LABEL, marginBottom: '10px', letterSpacing: '2px' }}>
         TOP {picks.length} HR PLAY{picks.length !== 1 ? 'S' : ''} &mdash; RANKED BY LIKELIHOOD TO HOMER
       </div>
-      <div style={{
+      <div className="ai-picks-grid" style={{
         display:             'grid',
         gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
         gap:                 '12px',

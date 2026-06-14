@@ -183,6 +183,8 @@ export default async function TrackerPage() {
     });
   } catch (err) {
     dbError = err instanceof Error ? err.message : String(err);
+    // eslint-disable-next-line no-console
+    console.error('[tracker] DB error:', dbError);
   }
 
   const totalBets   = tracker ? Number(tracker.total_bets)     : 0;
@@ -239,10 +241,9 @@ export default async function TrackerPage() {
 
         {/* Content */}
         {dbError ? (
-          <div style={{ ...CARD, padding: '40px', textAlign: 'center' }}>
-            <div style={{ ...LABEL, color: 'var(--ev-muted)', marginBottom: '8px' }}>DATABASE ERROR</div>
-            <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.15)', wordBreak: 'break-all' }}>
-              {dbError}
+          <div style={{ ...CARD, padding: '48px', textAlign: 'center' }}>
+            <div style={{ ...LABEL, color: 'var(--ev-muted)' }}>
+              Unable to load your tracker right now — please try again shortly.
             </div>
           </div>
         ) : totalBets === 0 ? (
@@ -327,8 +328,8 @@ export default async function TrackerPage() {
 
         {/* Footer */}
         <div style={{ ...LABEL, textAlign: 'center', marginTop: '40px', fontSize: '9px', color: 'rgba(255,255,255,0.15)' }}>
-          P/L SETTLES AFTER LOG RUN &nbsp;&middot;&nbsp;
-          EDGE = ADJ% - BOOK IMPLIED &nbsp;&middot;&nbsp;
+          P/L SETTLES AFTER GAMES ARE FINAL &nbsp;&middot;&nbsp;
+          EDGE = MODEL VS BOOK PRICE &nbsp;&middot;&nbsp;
           RESULTS UPDATED DAILY
         </div>
 
