@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
 import { getDb } from '@/lib/db';
-import { authOptions } from '@/lib/auth';
+import { getVerifiedIdentity } from '@/lib/iframeAuth';
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const sql = getDb();
 
@@ -30,8 +29,8 @@ export async function GET() {
     await sql`ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS discord_user_id TEXT`;
     await sql`ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS discord_username TEXT`;
 
-    const session = await getServerSession(authOptions);
-    const discordUserId = session?.user?.id ?? null;
+    const identity = getVerifiedIdentity(req);
+    const discordUserId = identity?.discordId ?? null;
 
     // Not logged in: no personal tracked plays to show.
     if (!discordUserId) {

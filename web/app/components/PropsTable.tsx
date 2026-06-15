@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect, Fragment } from 'react';
 import TrackButton from './TrackButton';
 import AiPicks from './AiPicks';
+import { useIframeIdentity, identityHeaders } from '../lib/iframeIdentity';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -570,12 +571,15 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
   const [searchQuery,     setSearchQuery]     = useState('');
   const [viewMode,        setViewMode]        = useState<'edge' | 'game' | 'ai'>('edge');
   const [trackedSet,      setTrackedSet]      = useState<Set<string>>(new Set());
+  const identity = useIframeIdentity();
+  const authHeaders = identityHeaders(identity);
 
   // Fetch already-tracked (game_date, batter) pairs so TRACK buttons can
   // render as TRACKED for plays the user has already logged.
   useEffect(() => {
+    if (identity === undefined) return;
     let cancelled = false;
-    fetch('/api/tracked')
+    fetch('/api/tracked', { headers: identityHeaders(identity) })
       .then(res => res.json())
       .then(data => {
         if (cancelled || !Array.isArray(data.bets)) return;
@@ -587,7 +591,7 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, []);
+  }, [identity]);
 
   function handleSort(key: SortKey | null) {
     if (!key) return;
@@ -758,7 +762,7 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
       </div>
 
       {/* AI Picks */}
-      {viewMode === 'ai' && <AiPicks rows={rows} trackedSet={trackedSet} />}
+      {viewMode === 'ai' && <AiPicks rows={rows} trackedSet={trackedSet} authHeaders={authHeaders} />}
 
       {/* Table */}
       {viewMode !== 'ai' && (
@@ -1043,6 +1047,7 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                         trackedOdds={trackedOdds}
                         trackedEdge={trackedEdge}
                         isTracked={trackedSet.has(`${toISODate(row.game_date)}-${row.batter}`)}
+                        authHeaders={authHeaders}
                       />
                     </td>
 
@@ -1219,6 +1224,7 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                       trackedOdds={row.best_odds}
                       trackedEdge={row.edge}
                       isTracked={trackedSet.has(`${toISODate(row.game_date)}-${row.batter}`)}
+                      authHeaders={authHeaders}
                     />
                   </div>
                 </div>

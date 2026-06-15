@@ -1,13 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useSession } from 'next-auth/react';
 import Nav from '../components/Nav';
-import SignInWithDiscord from '../components/SignInWithDiscord';
-import SignOutButton from '../components/SignOutButton';
 import PerformanceCharts, { type PLPoint, type CalibPoint } from './PerformanceCharts';
 import BetsTable from './BetsTable';
 import { type TrackedBet } from './shared';
+import { useIframeIdentity, identityHeaders } from '../lib/iframeIdentity';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -58,29 +56,15 @@ const CARD: React.CSSProperties = {
 // ── Page ───────────────────────────────────────────────────────────────────
 
 export default function TrackerClient() {
-  const { data: session, status } = useSession();
+  const identity = useIframeIdentity();
   const [data, setData] = useState<TrackerData | null>(null);
   const [dataError, setDataError] = useState<string | null>(null);
   const [slowLoad, setSlowLoad] = useState(false);
 
-  // When embedded in an iframe, sign-in completes in a new tab. That tab
-  // posts this message right before closing itself, so the iframe can
-  // reload and pick up the new session.
   useEffect(() => {
-    const handler = (e: MessageEvent) => {
-      if (e.origin !== 'https://theevcave.com' && e.origin !== 'https://mlb-ks-engine.vercel.app') return;
-      if (e.data === 'discord-auth-success') {
-        window.location.reload();
-      }
-    };
-    window.addEventListener('message', handler);
-    return () => window.removeEventListener('message', handler);
-  }, []);
-
-  useEffect(() => {
-    if (status !== 'authenticated') return;
+    if (!identity) return;
     let cancelled = false;
-    fetch('/api/tracker-data')
+    fetch('/api/tracker-data', { headers: identityHeaders(identity) })
       .then(res => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
@@ -92,18 +76,18 @@ export default function TrackerClient() {
         if (!cancelled) setDataError(err instanceof Error ? err.message : String(err));
       });
     return () => { cancelled = true; };
-  }, [status]);
+  }, [identity]);
 
   // After 10s of waiting on the DB, let the user know the wait is normal
-  // (Neon cold-starts can take a couple minutes on first sign-in).
+  // (Neon cold-starts can take a couple minutes on first load).
   useEffect(() => {
-    if (status !== 'authenticated' || data !== null || dataError !== null) {
+    if (!identity || data !== null || dataError !== null) {
       setSlowLoad(false);
       return;
     }
     const timer = setTimeout(() => setSlowLoad(true), 10000);
     return () => clearTimeout(timer);
-  }, [status, data, dataError]);
+  }, [identity, data, dataError]);
 
   const header = (
     <header style={{ marginBottom: '28px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
@@ -123,32 +107,17 @@ export default function TrackerClient() {
       </div>
 
       {/* Discord identity */}
-      {status === 'authenticated' && session?.user && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {session.user.image && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={session.user.image}
-              alt={session.user.username ?? session.user.name ?? 'Discord avatar'}
-              width={32}
-              height={32}
-              style={{ borderRadius: '50%', border: '1px solid var(--ev-border)' }}
-            />
-          )}
-          <div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--ev-text)', fontWeight: 600 }}>
-              {session.user.username ?? session.user.name ?? 'Unknown'}
-            </div>
-            <SignOutButton />
-          </div>
+      {identity && (
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--ev-text)', fontWeight: 600 }}>
+          {identity.discordUser}
         </div>
       )}
     </header>
   );
 
-  // Not signed in (or session still resolving) — show sign-in UI immediately,
-  // no loading spinner / blocking fetch.
-  if (status !== 'authenticated') {
+  // No verified identity (still resolving, or opened outside theevcave.com) —
+  // never show a blank page.
+  if (!identity) {
     return (
       <main style={{ minHeight: '100vh', background: 'var(--ev-bg)', padding: '32px 20px 60px' }}>
         <div style={{ maxWidth: '1380px', margin: '0 auto' }}>
@@ -156,13 +125,22 @@ export default function TrackerClient() {
           <Nav active="tracker" />
 
           <div style={{ ...CARD, padding: '48px', textAlign: 'center' }}>
-            <div style={{ ...LABEL, color: 'var(--ev-muted)', marginBottom: '16px' }}>
-              SIGN IN TO VIEW YOUR TRACKER
-            </div>
-            <div style={{ fontSize: '11px', color: 'var(--ev-dim)', marginBottom: '20px' }}>
-              Sign in with Discord to track your picks and see your personal performance history.
-            </div>
-            <SignInWithDiscord callbackUrl="/tracker" />
+            {identity === undefined ? (
+              <>
+                <div className="ev-spinner" style={{ marginBottom: '16px' }} />
+                <div style={{ ...LABEL, color: 'var(--ev-muted)' }}>LOADING&hellip;</div>
+              </>
+            ) : (
+              <>
+                <div style={{ ...LABEL, color: 'var(--ev-muted)', marginBottom: '16px' }}>
+                  SIGN IN ON THE +EV CAVE TO VIEW YOUR TRACKER
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--ev-dim)' }}>
+                  Open this tool from theevcave.com while signed in with Discord to track your
+                  picks and see your personal performance history.
+                </div>
+              </>
+            )}
           </div>
         </div>
       </main>

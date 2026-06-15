@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
 import { getDb } from '@/lib/db';
-import { authOptions } from '@/lib/auth';
+import { getVerifiedIdentity } from '@/lib/iframeAuth';
 
 export async function POST(req: NextRequest) {
   try {
@@ -41,9 +40,9 @@ export async function POST(req: NextRequest) {
     await sql`ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS discord_user_id TEXT`;
     await sql`ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS discord_username TEXT`;
 
-    const session = await getServerSession(authOptions);
-    const discordUserId   = session?.user?.id ?? null;
-    const discordUsername = session?.user?.username ?? null;
+    const identity = getVerifiedIdentity(req);
+    const discordUserId   = identity?.discordId ?? null;
+    const discordUsername = identity?.discordUsername ?? null;
 
     const result = await sql`
       INSERT INTO tracked_bets

@@ -1,16 +1,15 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
 import { getDb } from '@/lib/db';
-import { authOptions } from '@/lib/auth';
+import { getVerifiedIdentity } from '@/lib/iframeAuth';
 import { toISODate } from '../../tracker/shared';
 
-export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
+export async function GET(req: Request) {
+  const identity = getVerifiedIdentity(req);
+  if (!identity) {
     return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
   }
 
-  const discordUserId = session.user.id;
+  const discordUserId = identity.discordId;
 
   try {
     const sql = getDb();

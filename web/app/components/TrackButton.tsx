@@ -12,6 +12,7 @@ type Props = {
   trackedOdds: number | null;
   trackedEdge: number | null;
   isTracked?:  boolean;
+  authHeaders?: HeadersInit;
 };
 
 type Phase = 'idle' | 'open' | 'submitting' | 'done' | 'error' | 'tracked';
@@ -28,7 +29,7 @@ const BTN: React.CSSProperties = {
 };
 
 export default function TrackButton({
-  gameDate, batter, playerName, teamAbbr, adjProb, trackedOdds, trackedEdge, isTracked,
+  gameDate, batter, playerName, teamAbbr, adjProb, trackedOdds, trackedEdge, isTracked, authHeaders,
 }: Props) {
   const router = useRouter();
   const [phase,      setPhase]      = useState<Phase>(isTracked ? 'tracked' : 'idle');
@@ -65,7 +66,7 @@ export default function TrackButton({
     try {
       const res  = await fetch(url, {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body,
       });
       const text = await res.text();
