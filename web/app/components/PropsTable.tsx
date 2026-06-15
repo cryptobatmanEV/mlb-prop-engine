@@ -1191,7 +1191,7 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
 
                 {/* Stats + TRACK */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '10px' }}>
-                  <div style={{ display: 'flex', gap: '18px' }}>
+                  <div style={{ display: 'flex', gap: '12px' }}>
                     <div>
                       <div style={{ ...LABEL, fontSize: '9px', marginBottom: '3px' }}>ADJ%</div>
                       <div style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', fontWeight: 500, color: 'var(--ev-text)' }}>
@@ -1199,7 +1199,13 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                       </div>
                     </div>
                     <div>
-                      <div style={{ ...LABEL, fontSize: '9px', marginBottom: '3px' }}>ODDS</div>
+                      <div style={{ ...LABEL, fontSize: '9px', marginBottom: '3px' }}>FAIR</div>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', fontWeight: 500, color: 'var(--ev-dim)' }}>
+                        {fmtOdds(row.fair_odds)}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ ...LABEL, fontSize: '9px', marginBottom: '3px' }}>BOOK</div>
                       <div style={{
                         fontFamily: 'var(--font-mono)', fontSize: '13px', fontWeight: 500,
                         color: row.has_line ? 'var(--ev-blue)' : 'var(--ev-dim)',
