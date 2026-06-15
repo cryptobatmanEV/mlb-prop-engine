@@ -31,12 +31,11 @@ export const authOptions: NextAuthOptions = {
       }
       return session;
     },
-    // The iframe-embedded sign-in flow opens /api/auth/signin/discord in a
-    // new tab without a callbackUrl, so default to the tracker page.
-    async redirect({ url, baseUrl }) {
-      if (url.startsWith('/')) return `${baseUrl}${url}`;
-      if (new URL(url).origin === baseUrl) return url;
-      return `${baseUrl}/tracker`;
+    // Always land on /auth/success after sign-in. That page closes itself
+    // and notifies the opener if it was opened in a new tab (the
+    // iframe-embedded flow), or otherwise continues on to the tracker.
+    async redirect({ baseUrl }) {
+      return `${baseUrl}/auth/success`;
     },
   },
 };

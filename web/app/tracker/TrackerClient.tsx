@@ -63,6 +63,20 @@ export default function TrackerClient() {
   const [dataError, setDataError] = useState<string | null>(null);
   const [slowLoad, setSlowLoad] = useState(false);
 
+  // When embedded in an iframe, sign-in completes in a new tab. That tab
+  // posts this message right before closing itself, so the iframe can
+  // reload and pick up the new session.
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (e.origin !== 'https://theevcave.com' && e.origin !== 'https://mlb-ks-engine.vercel.app') return;
+      if (e.data === 'discord-auth-success') {
+        window.location.reload();
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, []);
+
   useEffect(() => {
     if (status !== 'authenticated') return;
     let cancelled = false;
