@@ -57,7 +57,7 @@ const CARD: React.CSSProperties = {
 
 // ── Page ───────────────────────────────────────────────────────────────────
 
-export default function TrackerClient({ discordAuthUrl }: { discordAuthUrl: string }) {
+export default function TrackerClient() {
   const { data: session, status } = useSession();
   const [data, setData] = useState<TrackerData | null>(null);
   const [dataError, setDataError] = useState<string | null>(null);
@@ -148,7 +148,7 @@ export default function TrackerClient({ discordAuthUrl }: { discordAuthUrl: stri
             <div style={{ fontSize: '11px', color: 'var(--ev-dim)', marginBottom: '20px' }}>
               Sign in with Discord to track your picks and see your personal performance history.
             </div>
-            <SignInWithDiscord discordAuthUrl={discordAuthUrl} />
+            <SignInWithDiscord callbackUrl="/tracker" />
           </div>
         </div>
       </main>
