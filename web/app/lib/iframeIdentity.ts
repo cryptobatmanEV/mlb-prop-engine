@@ -18,27 +18,62 @@ export function useIframeIdentity(): IframeIdentity | null | undefined {
   const [identity, setIdentity] = useState<IframeIdentity | null | undefined>(undefined);
 
   useEffect(() => {
-    const params      = new URLSearchParams(window.location.search);
+    const search      = window.location.search;
+    const params      = new URLSearchParams(search);
     const discordId   = params.get('discord_id');
     const discordUser = params.get('discord_user');
     const token       = params.get('token');
 
+    // eslint-disable-next-line no-console
+    console.log('[iframeIdentity] location.search =', search);
+    // eslint-disable-next-line no-console
+    console.log('[iframeIdentity] parsed params: discord_id =', discordId, ', discord_user =', discordUser, ', token =', token ? `${token.slice(0, 6)}... (len ${token.length})` : token);
+
     if (discordId && discordUser && token) {
       const value: IframeIdentity = { discordId, discordUser, token };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
+        // eslint-disable-next-line no-console
+        console.log('[iframeIdentity] all 3 URL params present, cached to localStorage, identity =', { discordId, discordUser });
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('[iframeIdentity] localStorage.setItem failed (storage blocked?) — using identity for this load only:', e);
+      }
       setIdentity(value);
       return;
     }
 
+    if (discordId || discordUser || token) {
+      // eslint-disable-next-line no-console
+      console.warn('[iframeIdentity] incomplete identity params in URL — discord_id, discord_user, and token must ALL be present. Got:', { discordId, discordUser, hasToken: !!token });
+    }
+
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
+      // eslint-disable-next-line no-console
+      console.log('[iframeIdentity] no complete URL params, checked localStorage, found =', stored ? 'cached identity' : 'nothing');
       setIdentity(stored ? (JSON.parse(stored) as IframeIdentity) : null);
-    } catch {
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[iframeIdentity] localStorage.getItem failed (storage blocked in this iframe context?):', e);
       setIdentity(null);
     }
   }, []);
 
   return identity;
+}
+
+// True if the URL has discord_id/discord_user but is missing (or has an
+// empty) token — i.e. theevcave.com identified the user but the HMAC token
+// needed to verify that identity server-side wasn't included. Used to show a
+// more specific message than a generic "sign in" prompt.
+export function hasIncompleteUrlIdentity(): boolean {
+  if (typeof window === 'undefined') return false;
+  const params = new URLSearchParams(window.location.search);
+  const discordId   = params.get('discord_id');
+  const discordUser = params.get('discord_user');
+  const token       = params.get('token');
+  return !!(discordId && discordUser) && !token;
 }
 
 // Headers to attach to /api/* requests so the server can re-verify identity.
