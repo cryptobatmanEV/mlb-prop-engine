@@ -5,7 +5,7 @@ import Nav from '../components/Nav';
 import PerformanceCharts, { type PLPoint, type CalibPoint } from './PerformanceCharts';
 import BetsTable from './BetsTable';
 import { type TrackedBet } from './shared';
-import { useIframeIdentity, identityHeaders, hasIncompleteUrlIdentity } from '../lib/iframeIdentity';
+import { useIframeIdentity, identityHeaders } from '../lib/iframeIdentity';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -129,17 +129,6 @@ export default function TrackerClient() {
               <>
                 <div className="ev-spinner" style={{ marginBottom: '16px' }} />
                 <div style={{ ...LABEL, color: 'var(--ev-muted)' }}>LOADING&hellip;</div>
-              </>
-            ) : hasIncompleteUrlIdentity() ? (
-              <>
-                <div style={{ ...LABEL, color: 'var(--ev-muted)', marginBottom: '16px' }}>
-                  IDENTITY VERIFICATION TOKEN MISSING
-                </div>
-                <div style={{ fontSize: '11px', color: 'var(--ev-dim)' }}>
-                  We can see your Discord ID from theevcave.com, but the security token used to
-                  verify it is missing from the link. This usually means the embed code on
-                  theevcave.com needs to be updated to include a signed <code>token</code> param.
-                </div>
               </>
             ) : (
               <>
