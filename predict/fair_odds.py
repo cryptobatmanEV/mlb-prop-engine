@@ -719,11 +719,29 @@ def run(date_str=None):
     skip_priced    = []   # already in today's CSV
     skip_started   = []   # live or final, not yet priced (props closed)
     skip_no_lineup = []   # preview but lineups not yet posted
+    partial_reprice_pks = set()  # games being re-run to pick up a late-posting lineup
+
+    # Build set of batter IDs already in existing output for partial-game detection
+    already_priced_batters = (
+        set(existing_df['batter'].dropna().astype(int))
+        if not existing_df.empty else set()
+    )
 
     for g in schedule_games:
         pk = g['game_pk']
         if pk in already_priced_pks:
-            skip_priced.append(g)
+            # If this game now has confirmed lineup players absent from the
+            # existing output, one team's lineup posted after the last run.
+            # Re-process the whole game so both sides get priced.
+            if pk in lineups_by_game:
+                missing = lineups_by_game[pk]['starters'] - already_priced_batters
+                if missing:
+                    new_games.append(g)
+                    partial_reprice_pks.add(pk)
+                else:
+                    skip_priced.append(g)
+            else:
+                skip_priced.append(g)
         elif g['status'] in ('live', 'final'):
             skip_started.append(g)
         elif pk in lineups_by_game:
@@ -731,7 +749,8 @@ def run(date_str=None):
         else:
             skip_no_lineup.append(g)
 
-    print(f"  Newly priceable:        {len(new_games)}")
+    print(f"  Newly priceable:        {len(new_games)}"
+          + (f" ({len(partial_reprice_pks)} partial top-up)" if partial_reprice_pks else ""))
     print(f"  Already priced today:   {len(skip_priced)}")
     print(f"  Started / finished:     {len(skip_started)}")
     print(f"  No lineup yet:          {len(skip_no_lineup)}")
@@ -879,6 +898,10 @@ def run(date_str=None):
         print(f"  Name-match misses: {unmatched_names}")
 
     # [9] Merge with previously priced players
+    # For partially re-priced games, drop the stale one-sided rows from
+    # existing_df first so the re-run replaces them cleanly for both teams.
+    if not existing_df.empty and partial_reprice_pks:
+        existing_df = existing_df[~existing_df['game_id'].isin(partial_reprice_pks)]
     if not existing_df.empty:
         combined_df = pd.concat([existing_df, new_result_df], ignore_index=True)
         print(f"\n  Merged: {len(existing_df)} existing + {len(new_result_df)} new "
