@@ -21,6 +21,7 @@ export type Row = {
   opp_team: string | null;
   is_home: string | null;
   adj_prob: number;
+  model_prob: number | null;
   fair_odds: number | null;
   has_line: boolean;
   best_book: string | null;
@@ -1135,6 +1136,15 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
           const { text: edgeText, color: edgeColor, weight: edgeWeight } =
             edgeDisplay(row.edge, row.has_line);
 
+          const rawInput   = customOdds[row.batter] ?? '';
+          const customNum  = parseCustomOdds(rawInput);
+          const myEdge     = customNum != null
+            ? row.adj_prob - americanToImplied(customNum)
+            : null;
+          const myEdgeDisp = edgeDisplay(myEdge, customNum != null);
+          const trackedOdds = customNum ?? row.best_odds;
+          const trackedEdge = customNum != null ? myEdge : row.edge;
+
           return (
             <Fragment key={`m-${row.game_id}-${row.batter}`}>
               <div
@@ -1227,8 +1237,8 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                       playerName={row.player_name}
                       teamAbbr={row.team_abbr}
                       adjProb={row.adj_prob}
-                      trackedOdds={row.best_odds}
-                      trackedEdge={row.edge}
+                      trackedOdds={trackedOdds}
+                      trackedEdge={trackedEdge}
                       isTracked={trackedSet.has(`${toISODate(row.game_date)}-${row.batter}`)}
                       authHeaders={authHeaders}
                     />
@@ -1238,6 +1248,56 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
 
               {isExpanded && (
                 <div style={{ marginBottom: '8px', border: '1px solid var(--ev-border)', borderRadius: '2px' }}>
+                  {/* PROJ / ADJ / MY LINE bar */}
+                  <div style={{
+                    display: 'flex', alignItems: 'flex-start', gap: '16px',
+                    padding: '12px 14px 10px 14px',
+                    borderBottom: '1px solid var(--ev-border)',
+                  }}>
+                    <div>
+                      <div style={{ ...LABEL, fontSize: '9px', marginBottom: '3px' }}>PROJ%</div>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', fontWeight: 500, color: 'var(--ev-dim)' }}>
+                        {row.model_prob != null ? fmtProb(row.model_prob) : '—'}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ ...LABEL, fontSize: '9px', marginBottom: '3px' }}>ADJ%</div>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', fontWeight: 500, color: 'var(--ev-text)' }}>
+                        {fmtProb(row.adj_prob)}
+                      </div>
+                    </div>
+                    <div style={{ marginLeft: 'auto' }} onClick={e => e.stopPropagation()}>
+                      <div style={{ ...LABEL, fontSize: '9px', marginBottom: '3px', color: 'var(--ev-gold)' }}>MY LINE</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
+                        <input
+                          type="text"
+                          placeholder="ODDS"
+                          value={rawInput}
+                          onChange={e => setCustomOdds(prev => ({ ...prev, [row.batter]: e.target.value }))}
+                          style={{
+                            width:        '80px',
+                            background:   'rgba(255,255,255,0.04)',
+                            border:       `1px solid ${customNum != null ? 'rgba(255,200,0,0.4)' : 'rgba(255,255,255,0.08)'}`,
+                            borderRadius: '2px',
+                            color:        customNum != null ? 'var(--ev-gold)' : 'rgba(255,255,255,0.25)',
+                            fontFamily:   'var(--font-mono)',
+                            fontSize:     '11px',
+                            padding:      '3px 7px',
+                            textAlign:    'right',
+                            outline:      'none',
+                          }}
+                        />
+                        {customNum != null && (
+                          <span style={{
+                            fontSize: '10px', letterSpacing: '1px',
+                            color: myEdgeDisp.color, fontWeight: myEdgeDisp.weight,
+                          }}>
+                            {myEdgeDisp.text} EV
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                   <DetailCard row={row} />
                 </div>
               )}
