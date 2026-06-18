@@ -19,6 +19,7 @@ Usage:
 """
 
 import os, re, sys, time, unicodedata
+import numpy as np
 import pandas as pd
 import requests
 from datetime import date, datetime, timedelta
@@ -477,7 +478,9 @@ def fetch_props_parlay_api(date_str):
 
     try:
         r, raw = _parlay_get('/sports/baseball_mlb/props')
-        credits_remaining = r.headers.get('x-credits-remaining', '?')
+        # ParlayAPI uses x-requests-remaining; fall back to x-credits-remaining
+        credits_remaining = r.headers.get('x-requests-remaining',
+                            r.headers.get('x-credits-remaining', '?'))
     except requests.HTTPError as e:
         code = e.response.status_code
         body = {}
@@ -642,10 +645,10 @@ def join_odds_and_edge(starters_df, best_odds_df):
 
     if best_odds_df.empty:
         df['has_line']     = 0
-        df['best_book']    = None
-        df['best_odds']    = None
-        df['book_implied'] = None
-        df['edge']         = None
+        df['best_book']    = None       # string column — None is fine
+        df['best_odds']    = np.nan     # keep float dtype for safe pd.concat
+        df['book_implied'] = np.nan
+        df['edge']         = np.nan
         return df.drop(columns=['name_norm'])
 
     merge_src = best_odds_df[['name_norm', 'bookmaker', 'odds_american', 'implied']].rename(
