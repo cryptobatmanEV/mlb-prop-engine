@@ -19,6 +19,7 @@ Usage:
 """
 
 import os, re, sys, time, unicodedata
+import numpy as np
 import pandas as pd
 import requests
 from datetime import date, datetime, timedelta
@@ -26,11 +27,20 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-ODDS_KEY  = os.getenv('ODDS_API_KEY') or os.getenv('ODDSPAPI_KEY')
-MLB_BASE  = 'https://statsapi.mlb.com/api/v1'
-ODDS_BASE = 'https://api.the-odds-api.com'
-PRED_DIR  = 'data/predictions'
-OUT_DIR   = 'data/outputs'
+ODDS_KEY      = os.getenv('ODDS_API_KEY') or os.getenv('ODDSPAPI_KEY')
+PARLAY_KEY    = os.getenv('PARLAY_API_KEY')
+MLB_BASE      = 'https://statsapi.mlb.com/api/v1'
+ODDS_BASE     = 'https://api.the-odds-api.com'
+PARLAY_BASE   = 'https://parlay-api.com/v1'
+PRED_DIR      = 'data/predictions'
+OUT_DIR       = 'data/outputs'
+
+# Feature flag: set ODDS_PROVIDER=parlay_api in .env to switch providers.
+# Defaults to odds_api so nothing changes until explicitly flipped.
+# ROLLBACK: set ODDS_PROVIDER=odds_api (or delete the var) to revert instantly.
+# The old OddsAPI functions (fetch_events_list, fetch_props_for_events) are
+# kept intact below so a rollback requires zero code changes.
+ODDS_PROVIDER = os.getenv('ODDS_PROVIDER', 'odds_api')  # 'odds_api' | 'parlay_api'
 
 # Keywords (lowercase) in OddsAPI team names that identify each MLB abbreviation.
 # Order matters — Cubs/White Sox and Angels/Dodgers must not cross-match.
@@ -83,6 +93,16 @@ def _mlb(path, params=None, timeout=15):
 def _odds_get(path, params=None, timeout=20):
     r = requests.get(f'{ODDS_BASE}{path}',
                      params={**(params or {}), 'apiKey': ODDS_KEY},
+                     timeout=timeout)
+    r.raise_for_status()
+    return r, r.json()
+
+def _parlay_get(path, params=None, timeout=30):
+    if not PARLAY_KEY:
+        raise ValueError("PARLAY_API_KEY not set in environment")
+    r = requests.get(f'{PARLAY_BASE}{path}',
+                     headers={'X-API-Key': PARLAY_KEY},
+                     params=params or {},
                      timeout=timeout)
     r.raise_for_status()
     return r, r.json()
@@ -428,6 +448,136 @@ def _best_lines(all_df):
             .first())
 
 
+# ── [5-7 alt] ParlayAPI: bulk props fetch (3 credits total) ──────────────────
+
+def fetch_props_parlay_api(date_str):
+    """
+    Fetch ALL MLB HR props from ParlayAPI in one call (3 credits).
+    Also extracts game totals (O/U) from the same response when available.
+
+    Returns:
+        events_for_matching  list[dict]   — [{id, home_team, away_team, commence_time}, ...]
+                                            shaped identically to OddsAPI events so
+                                            match_games_to_events() can be reused unchanged.
+        all_lines_df         DataFrame    — same schema as fetch_props_for_events output:
+                                            player_name_raw, bookmaker, odds_american,
+                                            event_id, implied, name_norm
+        game_totals          dict         — {canonical_event_id: float} O/U totals
+        credits_used         int          — 3
+        failed_count         int          — 0 or 1
+        credits_remaining    str
+    """
+    if not PARLAY_KEY:
+        print("  PARLAY_API_KEY not set -- skipping market lines.")
+        return [], pd.DataFrame(), {}, 0, 0, '?'
+
+    # 36-hour window: midnight UTC to 09:00 UTC next day (matches OddsAPI logic)
+    window_start = f"{date_str}T00:00:00Z"
+    next_day     = (datetime.fromisoformat(date_str) + timedelta(days=1)).strftime('%Y-%m-%d')
+    window_end   = f"{next_day}T09:00:00Z"
+
+    try:
+        r, raw = _parlay_get('/sports/baseball_mlb/props')
+        # ParlayAPI uses x-requests-remaining; fall back to x-credits-remaining
+        credits_remaining = r.headers.get('x-requests-remaining',
+                            r.headers.get('x-credits-remaining', '?'))
+    except requests.HTTPError as e:
+        code = e.response.status_code
+        body = {}
+        try:
+            body = e.response.json()
+        except Exception:
+            pass
+        if code == 401:
+            print("  ParlayAPI auth failed (401). Check PARLAY_API_KEY in .env.")
+        elif code == 403:
+            print("  ParlayAPI 403 Forbidden. Key may lack access to this endpoint.")
+        else:
+            print(f"  ParlayAPI props failed ({code}): {body.get('message', str(e))}")
+        return [], pd.DataFrame(), {}, 3, 1, '?'
+    except Exception as e:
+        print(f"  ParlayAPI props error: {e}")
+        return [], pd.DataFrame(), {}, 3, 1, '?'
+
+    # Response may be a top-level list or wrapped in a key
+    rows = raw if isinstance(raw, list) else raw.get('data', raw.get('results', raw.get('props', [])))
+
+    hr_rows      = []
+    game_totals  = {}
+    seen_events  = {}  # canonical_event_id -> event dict (for match_games_to_events)
+
+    for row in rows:
+        ct = row.get('commence_time', '')
+        if not (window_start <= ct < window_end):
+            continue
+
+        eid       = row.get('canonical_event_id', '')
+        home_team = row.get('home_team', '')
+        away_team = row.get('away_team', '')
+
+        # Build event index from whichever rows we encounter
+        if eid and eid not in seen_events:
+            seen_events[eid] = {
+                'id':            eid,
+                'home_team':     home_team,
+                'away_team':     away_team,
+                'commence_time': ct,
+            }
+
+        mkt = row.get('market_key', '')
+
+        # --- HR props (anytime: line == 0.5 or no line field) ---
+        if mkt == 'player_home_runs':
+            over_price = row.get('over_price')
+            if over_price is None:
+                continue
+            line = row.get('line')
+            # Only anytime-HR (0.5 line). Skip 1.5+ (multiple-HR markets).
+            if line is not None and float(line) != 0.5:
+                continue
+            player = row.get('player', '')
+            if not player:
+                continue
+            hr_rows.append({
+                'player_name_raw': player,
+                'bookmaker':       row.get('bookmaker', ''),
+                'odds_american':   int(over_price),
+                'event_id':        eid,
+            })
+
+        # --- Game totals (same call, free) ---
+        elif mkt == 'totals' and eid not in game_totals:
+            total_line = row.get('line')
+            if total_line is not None:
+                try:
+                    game_totals[eid] = float(total_line)
+                except (TypeError, ValueError):
+                    pass
+
+    events_for_matching = list(seen_events.values())
+    n_events = len(events_for_matching)
+
+    if not hr_rows:
+        print(f"  ParlayAPI: 0 HR lines in today's window across {n_events} event(s) "
+              f"| {credits_remaining} credits remaining")
+        return events_for_matching, pd.DataFrame(), game_totals, 3, 0, credits_remaining
+
+    all_df = pd.DataFrame(hr_rows)
+    all_df['implied']   = all_df['odds_american'].apply(american_to_implied)
+    all_df['name_norm'] = all_df['player_name_raw'].apply(norm_name)
+
+    n_players = all_df['name_norm'].nunique()
+    n_books   = all_df['bookmaker'].nunique()
+    avg_lines = all_df.groupby('name_norm').size().mean()
+    print(f"  ParlayAPI: {n_players} players | {n_books} book(s) | "
+          f"{avg_lines:.1f} lines/player | {n_events} event(s) | "
+          f"{credits_remaining} credits remaining")
+    if game_totals:
+        print(f"  {len(game_totals)} game O/U total(s): {[f'{v}' for v in game_totals.values()]}")
+
+    return events_for_matching, all_df, game_totals, 3, 0, credits_remaining
+
+
 def refresh_context_columns(existing_df, pred_df, date_str):
     """
     Refresh time-sensitive context columns (season_hr, days_since_hr, recent_hr)
@@ -495,10 +645,10 @@ def join_odds_and_edge(starters_df, best_odds_df):
 
     if best_odds_df.empty:
         df['has_line']     = 0
-        df['best_book']    = None
-        df['best_odds']    = None
-        df['book_implied'] = None
-        df['edge']         = None
+        df['best_book']    = None       # string column — None is fine
+        df['best_odds']    = np.nan     # keep float dtype for safe pd.concat
+        df['book_implied'] = np.nan
+        df['edge']         = np.nan
         return df.drop(columns=['name_norm'])
 
     merge_src = best_odds_df[['name_norm', 'bookmaker', 'odds_american', 'implied']].rename(
@@ -652,16 +802,20 @@ def print_run_summary(schedule_games, lineups_by_game, already_priced_pks,
         print(f"  {matchup:<18}  {state:<8}  {action}")
 
     # Credit accounting
-    print(f"\n  OddsAPI credits used this run:")
-    if credits_events > 0:
-        print(f"    Events list:          {credits_events} credit")
-        print(f"    Game props ({len(new_games)} events): {credits_props} credits")
-    else:
-        print(f"    None (no new games to price)")
+    provider_label = 'ParlayAPI' if ODDS_PROVIDER == 'parlay_api' else 'OddsAPI'
+    print(f"\n  {provider_label} credits used this run:")
     total_this_run = credits_events + credits_props
+    if total_this_run == 0:
+        print(f"    None (no new games to price)")
+    elif ODDS_PROVIDER == 'parlay_api':
+        print(f"    Bulk props call:      {credits_props} credits")
+    else:
+        if credits_events > 0:
+            print(f"    Events list:          {credits_events} credit")
+        print(f"    Game props ({len(new_games)} events): {credits_props} credits")
     print(f"    Total this run:       {total_this_run} credits")
     if failed_count:
-        print(f"    Failed event calls:   {failed_count}")
+        print(f"    Failed calls:         {failed_count}")
     print(f"  Credits remaining: {credits_remaining}")
 
     # Day-level summary
@@ -842,40 +996,57 @@ def run(date_str=None):
         ].tolist()
         print(f"  HOT (HR in last 5 games): {hot_names}")
 
-    # [5] OddsAPI: events list (1 credit, only if there are new games)
-    print("\n[5] Fetching OddsAPI events list...")
-    today_events, credits_remaining = fetch_events_list(date_str)
-    if today_events:
-        credits_events = 1
+    # [5-7] Fetch market lines (provider-selected via ODDS_PROVIDER env var)
+    game_totals       = {}
+    game_to_event     = {}
+    all_odds_df       = pd.DataFrame()
 
-    # [6] Match game_pks to OddsAPI event IDs
-    print("\n[6] Matching games to OddsAPI events...")
-    game_to_event = match_games_to_events(new_games, today_events)
-    matched    = [g for g in new_games if g['game_pk'] in game_to_event]
-    unmatched  = [g for g in new_games if g['game_pk'] not in game_to_event]
-    print(f"  Matched: {len(matched)} / {len(new_games)} new games to OddsAPI events")
-    if unmatched:
-        labels = [f"{g['away_abbr']}@{g['home_abbr']}" for g in unmatched]
-        print(f"  No OddsAPI event found for: {labels} (will price without lines)")
+    if ODDS_PROVIDER == 'parlay_api':
+        # ── ParlayAPI: one bulk call replaces the events-list + per-event calls ──
+        print(f"\n[5-7] Fetching HR props from ParlayAPI (bulk call, 3 credits)...")
+        (pa_events, all_odds_df, game_totals,
+         credits_props, failed_count, credits_remaining) = fetch_props_parlay_api(date_str)
 
-    # [7] Fetch props only for matched new events
-    game_totals = {}
-    new_event_ids = [game_to_event[g['game_pk']] for g in matched]
-    if new_event_ids:
-        print(f"\n[7] Fetching HR props for {len(new_event_ids)} new event(s)...")
-        all_odds_df, game_totals, credits_props, failed_count, credits_remaining = \
-            fetch_props_for_events(new_event_ids)
-        if not all_odds_df.empty:
-            n_books = all_odds_df['bookmaker'].nunique()
-            avg     = all_odds_df.groupby('name_norm').size().mean()
-            print(f"  {len(_best_lines(all_odds_df))} players with lines | "
-                  f"{n_books} bookmaker(s) | {avg:.1f} lines/player avg")
-        n_totals = len(game_totals)
-        if n_totals:
-            print(f"  {n_totals} game O/U total(s) fetched: "
-                  f"{[f'{v}' for v in game_totals.values()]}")
+        print(f"\n[6] Matching games to ParlayAPI events...")
+        game_to_event = match_games_to_events(new_games, pa_events)
+        matched   = [g for g in new_games if g['game_pk'] in game_to_event]
+        unmatched = [g for g in new_games if g['game_pk'] not in game_to_event]
+        print(f"  Matched: {len(matched)} / {len(new_games)} new games to ParlayAPI events")
+        if unmatched:
+            labels = [f"{g['away_abbr']}@{g['home_abbr']}" for g in unmatched]
+            print(f"  No ParlayAPI event found for: {labels} (will price without lines)")
+
     else:
-        print("\n[7] No new events to fetch odds for.")
+        # ── OddsAPI: events list (1 credit) + per-event props (1 credit each) ──
+        print("\n[5] Fetching OddsAPI events list...")
+        today_events, credits_remaining = fetch_events_list(date_str)
+        if today_events:
+            credits_events = 1
+
+        print("\n[6] Matching games to OddsAPI events...")
+        game_to_event = match_games_to_events(new_games, today_events)
+        matched   = [g for g in new_games if g['game_pk'] in game_to_event]
+        unmatched = [g for g in new_games if g['game_pk'] not in game_to_event]
+        print(f"  Matched: {len(matched)} / {len(new_games)} new games to OddsAPI events")
+        if unmatched:
+            labels = [f"{g['away_abbr']}@{g['home_abbr']}" for g in unmatched]
+            print(f"  No OddsAPI event found for: {labels} (will price without lines)")
+
+        new_event_ids = [game_to_event[g['game_pk']] for g in matched]
+        if new_event_ids:
+            print(f"\n[7] Fetching HR props for {len(new_event_ids)} new event(s)...")
+            all_odds_df, game_totals, credits_props, failed_count, credits_remaining = \
+                fetch_props_for_events(new_event_ids)
+            if not all_odds_df.empty:
+                n_books = all_odds_df['bookmaker'].nunique()
+                avg     = all_odds_df.groupby('name_norm').size().mean()
+                print(f"  {len(_best_lines(all_odds_df))} players with lines | "
+                      f"{n_books} bookmaker(s) | {avg:.1f} lines/player avg")
+            if game_totals:
+                print(f"  {len(game_totals)} game O/U total(s) fetched: "
+                      f"{[f'{v}' for v in game_totals.values()]}")
+        else:
+            print("\n[7] No new events to fetch odds for.")
 
     best_odds_df = _best_lines(all_odds_df)
 
