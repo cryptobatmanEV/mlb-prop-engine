@@ -528,6 +528,10 @@ def fetch_props_parlay_api(date_str):
 
         # --- HR props (anytime: line == 0.5 or no line field) ---
         if mkt == 'player_home_runs':
+            # Skip DFS flat-payout platforms (PrizePicks, Underdog, Sleeper).
+            # Their normalized +100/-100 prices are not real sportsbook lines.
+            if row.get('is_dfs_flat_payout'):
+                continue
             over_price = row.get('over_price')
             if over_price is None:
                 continue

@@ -6,8 +6,8 @@ import type { Row } from './PropsTable';
 
 // ── Config ─────────────────────────────────────────────────────────────────
 
-const MIN_ADJ_PROB = 0.12; // don't surface low-probability longshots
-const MIN_EDGE     = 0;    // still require a positive edge, but it's a tiebreaker
+const MIN_ADJ_PROB = 0.12;   // don't surface low-probability longshots
+const MIN_EDGE     = -0.03;  // allow slight negative edge; users can shop lines on Novig
 const MAX_PICKS    = 5;
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -154,7 +154,7 @@ export default function AiPicks({ rows, trackedSet, authHeaders }: { rows: Row[]
       <div style={{ ...CARD, padding: '48px', textAlign: 'center' }}>
         <div style={{ ...LABEL, color: 'var(--ev-muted)', marginBottom: '6px' }}>NO AI PICKS TODAY</div>
         <div style={{ fontSize: '11px', color: 'var(--ev-dim)' }}>
-          Nothing clears the {(MIN_ADJ_PROB * 100).toFixed(0)}%+ HR probability / positive-edge threshold yet.
+          Nothing clears the {(MIN_ADJ_PROB * 100).toFixed(0)}%+ HR probability / edge &gt; −3% threshold yet.
           Check back after lineups/odds refresh.
         </div>
       </div>
