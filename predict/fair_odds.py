@@ -856,6 +856,21 @@ def run(date_str=None):
     existing_df, already_priced_pks = load_existing_output(date_str)
     existing_df = refresh_context_columns(existing_df, pred_df, date_str)
 
+    # Games where every batter was written with has_line=0 failed to get odds
+    # (e.g. wrong odds provider, API outage).  Remove them from already_priced_pks
+    # so the next run re-prices them rather than skipping them forever.
+    force_reprice_pks: set = set()
+    if not existing_df.empty and 'has_line' in existing_df.columns:
+        lined_pks = set(
+            existing_df.loc[existing_df['has_line'] == 1, 'game_id']
+            .dropna().astype(int).unique()
+        )
+        force_reprice_pks = already_priced_pks - lined_pks
+        if force_reprice_pks:
+            already_priced_pks -= force_reprice_pks
+            print(f"  {len(force_reprice_pks)} game(s) had 0 lines last run -- re-queued: "
+                  f"{sorted(force_reprice_pks)}")
+
     # [2] Schedule with game states
     print("\n[2] Fetching schedule and game states...")
     schedule_games = fetch_schedule(date_str)
@@ -1073,10 +1088,12 @@ def run(date_str=None):
         print(f"  Name-match misses: {unmatched_names}")
 
     # [9] Merge with previously priced players
-    # For partially re-priced games, drop the stale one-sided rows from
-    # existing_df first so the re-run replaces them cleanly for both teams.
-    if not existing_df.empty and partial_reprice_pks:
-        existing_df = existing_df[~existing_df['game_id'].isin(partial_reprice_pks)]
+    # Strip stale rows only for games being actively re-priced this run.
+    # Intersect with new_pks so games that ended up skip_started/skip_no_lineup
+    # keep their existing rows in the CSV (their DB rows are preserved by upsert).
+    all_reprice_pks = (partial_reprice_pks | force_reprice_pks) & new_pks
+    if not existing_df.empty and all_reprice_pks:
+        existing_df = existing_df[~existing_df['game_id'].isin(all_reprice_pks)]
     if not existing_df.empty:
         combined_df = pd.concat([existing_df, new_result_df], ignore_index=True)
         print(f"\n  Merged: {len(existing_df)} existing + {len(new_result_df)} new "
