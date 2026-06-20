@@ -174,7 +174,7 @@ export default function AiPicks({ rows, trackedSet, authHeaders }: { rows: Row[]
         {picks.map(({ row, score, reason }, idx) => {
           const opponent = opponentFor(row);
           const edgePct  = (row.edge as number) * 100;
-          const edgeColor = edgePct > 5 ? 'var(--ev-green)' : 'var(--ev-green)';
+          const edgeColor = edgePct > 0 ? 'var(--ev-green)' : 'var(--ev-muted)';
 
           return (
             <div
@@ -215,7 +215,7 @@ export default function AiPicks({ rows, trackedSet, authHeaders }: { rows: Row[]
                 <StatChip label="ADJ%" value={fmtPct(row.adj_prob)} />
                 <StatChip
                   label="EDGE"
-                  value={`+${edgePct.toFixed(1)}%`}
+                  value={`${edgePct >= 0 ? '+' : ''}${edgePct.toFixed(1)}%`}
                   color={edgeColor}
                 />
               </div>
