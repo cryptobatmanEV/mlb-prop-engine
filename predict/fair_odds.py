@@ -477,7 +477,8 @@ def fetch_props_parlay_api(date_str):
     window_end   = f"{next_day}T09:00:00Z"
 
     try:
-        r, raw = _parlay_get('/sports/baseball_mlb/props')
+        r, raw = _parlay_get('/sports/baseball_mlb/props',
+                              params={'markets': 'player_home_runs,totals'})
         # ParlayAPI uses x-requests-remaining; fall back to x-credits-remaining
         credits_remaining = r.headers.get('x-requests-remaining',
                             r.headers.get('x-credits-remaining', '?'))
@@ -536,8 +537,9 @@ def fetch_props_parlay_api(date_str):
             if over_price is None:
                 continue
             line = row.get('line')
-            # Only anytime-HR (0.5 line). Skip 1.5+ (multiple-HR markets).
-            if line is not None and float(line) != 0.5:
+            # Only anytime-HR (0.5 line). Skip 2+ HR markets (line=1.5) and
+            # any row where line is absent (e.g. Bovada "2+ HR" with line=None).
+            if line is None or float(line) != 0.5:
                 continue
             player = row.get('player', '')
             if not player:
