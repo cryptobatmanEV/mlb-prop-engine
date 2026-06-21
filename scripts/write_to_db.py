@@ -300,6 +300,19 @@ def run(date_str=None):
                         cur.execute("RELEASE SAVEPOINT mig")
                     except Exception:
                         cur.execute("ROLLBACK TO SAVEPOINT mig")  # keep outer tx alive
+                # Sync: delete any today-rows whose game_id is no longer in the CSV.
+                # This removes players from postponed/cancelled games that were stripped
+                # from the output file since the last pipeline run.
+                if not df.empty:
+                    csv_game_ids = [int(x) for x in df['game_id'].dropna().unique()]
+                    cur.execute(
+                        "DELETE FROM hr_predictions WHERE game_date = %s AND game_id != ALL(%s)",
+                        (date_str, csv_game_ids),
+                    )
+                    deleted = cur.rowcount
+                    if deleted > 0:
+                        print(f"  Removed {deleted} stale row(s) for postponed/cancelled game(s).")
+
                 for _, row in df.iterrows():
                     cur.execute(UPSERT, {
                         'game_date':     date_str,

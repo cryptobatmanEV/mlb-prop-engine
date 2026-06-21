@@ -78,6 +78,13 @@ _TEAM_KEYS = [
 ]
 _ABBR_KEYS = {abbr: keys for abbr, keys in _TEAM_KEYS}
 
+# MLB statusCode values that mean the game will not be played as scheduled.
+_POSTPONED_CODES = frozenset({
+    'DI', 'DO', 'DR', 'DS', 'DV',  # Postponed – various reasons
+    'CR', 'CO',                      # Cancelled – Rain / Other
+    'SU', 'SI',                      # Suspended – Inclement Weather / Other
+})
+
 # Expected PAs by batting order slot (used to refine adj_prob once bat_order is known)
 EXP_PA_BY_ORDER = {1: 4.3, 2: 4.2, 3: 4.1, 4: 4.0, 5: 3.9, 6: 3.7, 7: 3.6, 8: 3.5, 9: 3.4}
 EXP_PA_DEFAULT  = 3.8
@@ -183,8 +190,12 @@ def fetch_schedule(date_str):
     games = []
     for date_block in data.get('dates', []):
         for g in date_block.get('games', []):
-            raw_state = g.get('status', {}).get('abstractGameState', 'Preview')
+            status_obj  = g.get('status', {})
+            raw_state   = status_obj.get('abstractGameState', 'Preview')
+            status_code = status_obj.get('statusCode', '')
             state = raw_state.lower()  # 'preview', 'live', 'final'
+            if status_code in _POSTPONED_CODES:
+                state = 'postponed'
             ht = g.get('teams', {}).get('home', {}).get('team', {})
             at = g.get('teams', {}).get('away', {}).get('team', {})
             games.append({
@@ -792,7 +803,9 @@ def print_run_summary(schedule_games, lineups_by_game, already_priced_pks,
         pk = g['game_pk']
         matchup = f"{g['away_abbr']} @ {g['home_abbr']}"
         state   = g['status'].capitalize()
-        if pk in already_priced_pks:
+        if g['status'] == 'postponed':
+            action = "Postponed/cancelled -- removed from card"
+        elif pk in already_priced_pks:
             action = "Already priced -- skipped"
         elif g['status'] in ('live', 'final'):
             action = "Started/finished -- skipped (props closed)"
@@ -873,6 +886,20 @@ def run(date_str=None):
             print(f"  {len(force_reprice_pks)} game(s) had 0 lines last run -- re-queued: "
                   f"{sorted(force_reprice_pks)}")
 
+    # Games with SOME has_line=True but remaining has_line=False players get re-queued
+    # so the missing players can pick up odds on the next run.
+    partial_odds_pks: set = set()
+    if not existing_df.empty and 'has_line' in existing_df.columns:
+        for pk in list(already_priced_pks):
+            game_rows = existing_df[existing_df['game_id'] == pk]
+            if not game_rows.empty:
+                if (game_rows['has_line'] == 1).any() and (game_rows['has_line'] == 0).any():
+                    partial_odds_pks.add(pk)
+        if partial_odds_pks:
+            already_priced_pks -= partial_odds_pks
+            print(f"  {len(partial_odds_pks)} game(s) have partial lines -- re-queued for top-up: "
+                  f"{sorted(partial_odds_pks)}")
+
     # [2] Schedule with game states
     print("\n[2] Fetching schedule and game states...")
     schedule_games = fetch_schedule(date_str)
@@ -894,6 +921,7 @@ def run(date_str=None):
     skip_priced    = []   # already in today's CSV
     skip_started   = []   # live or final, not yet priced (props closed)
     skip_no_lineup = []   # preview but lineups not yet posted
+    skip_postponed = []   # postponed, cancelled, or suspended
     partial_reprice_pks = set()  # games being re-run to pick up a late-posting lineup
 
     # Build set of batter IDs already in existing output for partial-game detection
@@ -904,7 +932,9 @@ def run(date_str=None):
 
     for g in schedule_games:
         pk = g['game_pk']
-        if pk in already_priced_pks:
+        if g['status'] == 'postponed':
+            skip_postponed.append(g)
+        elif pk in already_priced_pks:
             # If this game now has confirmed lineup players absent from the
             # existing output, one team's lineup posted after the last run.
             # Re-process the whole game so both sides get priced.
@@ -924,10 +954,23 @@ def run(date_str=None):
         else:
             skip_no_lineup.append(g)
 
+    # Strip rows for postponed/cancelled games so they don't appear on the card
+    postponed_pks = {g['game_pk'] for g in skip_postponed}
+    if not existing_df.empty and postponed_pks:
+        before = len(existing_df)
+        existing_df = existing_df[~existing_df['game_id'].isin(postponed_pks)]
+        removed = before - len(existing_df)
+        if removed:
+            labels = [f"{g['away_abbr']}@{g['home_abbr']}" for g in skip_postponed]
+            print(f"  Removed {removed} player(s) for postponed/cancelled game(s): {labels}")
+
     print(f"  Newly priceable:        {len(new_games)}"
           + (f" ({len(partial_reprice_pks)} partial top-up)" if partial_reprice_pks else ""))
     print(f"  Already priced today:   {len(skip_priced)}")
     print(f"  Started / finished:     {len(skip_started)}")
+    if skip_postponed:
+        labels = [f"{g['away_abbr']}@{g['home_abbr']}" for g in skip_postponed]
+        print(f"  Postponed/cancelled:    {len(skip_postponed)}  {labels}")
     print(f"  No lineup yet:          {len(skip_no_lineup)}")
 
     # Track credits for summary
@@ -1093,7 +1136,7 @@ def run(date_str=None):
     # Strip stale rows only for games being actively re-priced this run.
     # Intersect with new_pks so games that ended up skip_started/skip_no_lineup
     # keep their existing rows in the CSV (their DB rows are preserved by upsert).
-    all_reprice_pks = (partial_reprice_pks | force_reprice_pks) & new_pks
+    all_reprice_pks = (partial_reprice_pks | force_reprice_pks | partial_odds_pks) & new_pks
     if not existing_df.empty and all_reprice_pks:
         existing_df = existing_df[~existing_df['game_id'].isin(all_reprice_pks)]
     if not existing_df.empty:
