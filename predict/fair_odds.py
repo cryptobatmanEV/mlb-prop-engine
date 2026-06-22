@@ -938,7 +938,10 @@ def run(date_str=None):
             # If this game now has confirmed lineup players absent from the
             # existing output, one team's lineup posted after the last run.
             # Re-process the whole game so both sides get priced.
-            if pk in lineups_by_game:
+            # CRITICAL: only do this for Preview games. A Live/Final game's
+            # batting order is locked and props are closed; re-pricing it
+            # would produce has_line=0 rows that overwrite valid odds.
+            if g['status'] not in ('live', 'final') and pk in lineups_by_game:
                 missing = lineups_by_game[pk]['starters'] - already_priced_batters
                 if missing:
                     new_games.append(g)
