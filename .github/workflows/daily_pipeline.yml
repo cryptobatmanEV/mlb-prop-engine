@@ -59,6 +59,8 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          PARLAY_API_KEY: ${{ secrets.PARLAY_API_KEY }}
+          ODDS_PROVIDER: parlay_api
         run: python scripts/daily_pipeline.py
 
       # Commit the new fair_odds CSV and any results_log updates back to the repo.
