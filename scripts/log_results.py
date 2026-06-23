@@ -238,6 +238,49 @@ def write_results_to_db(date_str, pred_df):
         print(f"  WARNING: hr_predictions result write failed: {e}")
 
 
+def grade_ai_picks_log(date_str, pred_df):
+    """
+    After results are confirmed, stamp actual_hr and result onto every
+    hr_ai_picks_log row for this game_date that hasn't been graded yet.
+    """
+    import psycopg2
+    db_url = os.getenv('DATABASE_URL')
+    if not db_url:
+        return
+
+    known = pred_df[pred_df['hit_hr'] >= 0][['batter', 'actual_hr_count']].copy()
+    if known.empty:
+        return
+
+    try:
+        conn = psycopg2.connect(db_url)
+        try:
+            updated = 0
+            with conn:
+                with conn.cursor() as cur:
+                    for _, row in known.iterrows():
+                        actual_hr = int(row['actual_hr_count'])
+                        result    = 'HIT' if actual_hr > 0 else 'MISS'
+                        cur.execute(
+                            """
+                            UPDATE hr_ai_picks_log
+                               SET actual_hr = %s,
+                                   result    = %s
+                             WHERE game_date = %s
+                               AND batter    = %s
+                               AND result IS NULL
+                            """,
+                            (actual_hr, result, date_str, int(row['batter'])),
+                        )
+                        updated += cur.rowcount
+            if updated:
+                print(f"  Graded {updated} AI pick(s) in hr_ai_picks_log.")
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f"  WARNING: hr_ai_picks_log grading failed: {e}")
+
+
 def backfill_tracked_bets(date_str, pred_df):
     """
     After results are logged, update tracked_bets rows for this date
@@ -306,6 +349,7 @@ def run(date_str=None, force_db=False):
         pred_df = log[log['game_date'].astype(str) == str(date_str)].copy()
         write_results_to_db(date_str, pred_df)
         backfill_tracked_bets(date_str, pred_df)
+        grade_ai_picks_log(date_str, pred_df)
         print_calibration_summary()
         return
 
@@ -362,9 +406,10 @@ def run(date_str=None, force_db=False):
     total_rows = append_to_log(pred_df[save_cols])
     print(f"\n  Appended {len(pred_df)} rows to {LOG_PATH}  ({total_rows} total rows in log)")
 
-    # Write results to Neon (hr_predictions + tracked_bets)
+    # Write results to Neon (hr_predictions + tracked_bets + ai_picks_log)
     write_results_to_db(date_str, pred_df)
     backfill_tracked_bets(date_str, pred_df)
+    grade_ai_picks_log(date_str, pred_df)
 
     # Running calibration summary
     print_calibration_summary()

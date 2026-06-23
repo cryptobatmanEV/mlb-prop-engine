@@ -25,6 +25,31 @@ sys.path.insert(0, ROOT)
 DATABASE_URL = os.getenv('DATABASE_URL')
 OUTPUTS_DIR  = 'data/outputs'
 
+CREATE_AI_PICKS_LOG = """
+CREATE TABLE IF NOT EXISTS hr_ai_picks_log (
+    id              SERIAL PRIMARY KEY,
+    game_date       DATE        NOT NULL,
+    captured_at     TIMESTAMPTZ NOT NULL,
+    batter          BIGINT      NOT NULL,
+    player_name     TEXT,
+    team            TEXT,
+    best_odds       INTEGER,
+    best_book       TEXT,
+    edge            NUMERIC,
+    adj_prob        NUMERIC,
+    fair_odds       NUMERIC,
+    model_prob      NUMERIC,
+    barrel_pct      NUMERIC,
+    hard_hit_pct    NUMERIC,
+    hr_park_factor  NUMERIC,
+    batting_order   INTEGER,
+    szn_hr          INTEGER,
+    composite_score NUMERIC,
+    actual_hr       INTEGER,
+    result          TEXT
+);
+"""
+
 CREATE_TRACKED_BETS = """
 CREATE TABLE IF NOT EXISTS tracked_bets (
     id           SERIAL PRIMARY KEY,
@@ -293,6 +318,7 @@ def run(date_str=None):
             with conn.cursor() as cur:
                 cur.execute(CREATE_TABLE)
                 cur.execute(CREATE_TRACKED_BETS)
+                cur.execute(CREATE_AI_PICKS_LOG)
                 for stmt in MIGRATE_HR_PREDICTIONS + MIGRATE_TRACKED_BETS:
                     try:
                         cur.execute("SAVEPOINT mig")

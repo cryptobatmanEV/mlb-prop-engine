@@ -66,7 +66,11 @@ def run(date_str=None):
 
     # Step 4: write to Neon DB (non-fatal -- CSV is the source of truth)
     from scripts.write_to_db import run as db_run
-    _run_step(f"Step 4/4  Write to DB ({date_str})", db_run, date_str)
+    _run_step(f"Step 4/5  Write to DB ({date_str})", db_run, date_str)
+
+    # Step 5: log AI PICKS snapshot (non-fatal)
+    from scripts.log_ai_picks import run as ai_picks_run
+    _run_step(f"Step 5/5  Log AI picks ({date_str})", ai_picks_run, date_str)
 
     print(f"\n{'#'*60}")
     print(f"#  Done  --  {date_str}")
