@@ -1,20 +1,26 @@
 name: Daily Pipeline
 
-# Runs five times per day during baseball season:
-#    1 AM ET ( 6:00 UTC) — log-results-only run (no predictions; gives the
+# Runs eight times per day during baseball season:
+#    6 AM ET (10:00 UTC) — log-results-only run (no predictions; gives the
 #                          prior evening's late games time to finalize)
-#    9 AM ET (14:00 UTC) — full pipeline, after overnight lineups post
-#   11 AM ET (16:00 UTC) — full pipeline, refresh with confirmed lineups
-#    3 PM ET (20:00 UTC) — full pipeline, afternoon/evening lineups confirmed
-#    5 PM ET (22:00 UTC) — full pipeline, late lineup changes
+#    8 AM ET (12:00 UTC) — full pipeline, early overnight lineups
+#   10 AM ET (14:00 UTC) — full pipeline, after overnight lineups post
+#   11 AM ET (15:00 UTC) — full pipeline, refresh with confirmed lineups
+#    1 PM ET (17:00 UTC) — full pipeline, afternoon lineups confirmed
+#    2 PM ET (18:00 UTC) — full pipeline, afternoon/evening lineups confirmed
+#    4 PM ET (20:00 UTC) — full pipeline, late afternoon lineups
+#    6 PM ET (22:00 UTC) — full pipeline, late lineup changes
 
 on:
   schedule:
-    - cron: '0 6 * * *'    #  1:00 AM ET (6:00 UTC)  — log results ONLY
-    - cron: '0 14 * * *'   #  9:00 AM ET (14:00 UTC) — full pipeline
-    - cron: '0 16 * * *'   # 11:00 AM ET (16:00 UTC) — full pipeline
-    - cron: '0 20 * * *'   #  3:00 PM ET (20:00 UTC) — full pipeline
-    - cron: '0 22 * * *'   #  5:00 PM ET (22:00 UTC) — full pipeline
+    - cron: '0 10 * * *'   #  6:00 AM ET (10:00 UTC) — log results ONLY
+    - cron: '0 12 * * *'   #  8:00 AM ET (12:00 UTC) — full pipeline
+    - cron: '0 14 * * *'   # 10:00 AM ET (14:00 UTC) — full pipeline
+    - cron: '0 15 * * *'   # 11:00 AM ET (15:00 UTC) — full pipeline
+    - cron: '0 17 * * *'   #  1:00 PM ET (17:00 UTC) — full pipeline
+    - cron: '0 18 * * *'   #  2:00 PM ET (18:00 UTC) — full pipeline
+    - cron: '0 20 * * *'   #  4:00 PM ET (20:00 UTC) — full pipeline
+    - cron: '0 22 * * *'   #  6:00 PM ET (22:00 UTC) — full pipeline
   workflow_dispatch:         # manual trigger from the Actions tab
 
 permissions:
@@ -55,7 +61,7 @@ jobs:
       # Generate today's predictions and write to Neon (powers the web app).
       # Skipped on the 1 AM ET (6:00 UTC) run, which only logs results.
       - name: Generate today's predictions
-        if: github.event.schedule != '0 6 * * *'
+        if: github.event.schedule != '0 10 * * *'
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}

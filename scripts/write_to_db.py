@@ -193,7 +193,7 @@ ON CONFLICT (game_date, batter, game_id) DO UPDATE SET
     lineup_source            = EXCLUDED.lineup_source,
     adj_prob                 = EXCLUDED.adj_prob,
     fair_odds                = EXCLUDED.fair_odds,
-    has_line     = CASE WHEN EXCLUDED.has_line IS TRUE THEN EXCLUDED.has_line     ELSE hr_predictions.has_line     END,
+    has_line     = EXCLUDED.has_line,
     best_book    = CASE WHEN EXCLUDED.has_line IS TRUE THEN EXCLUDED.best_book    ELSE hr_predictions.best_book    END,
     best_odds    = CASE WHEN EXCLUDED.has_line IS TRUE THEN EXCLUDED.best_odds    ELSE hr_predictions.best_odds    END,
     book_implied = CASE WHEN EXCLUDED.has_line IS TRUE THEN EXCLUDED.book_implied ELSE hr_predictions.book_implied END,
