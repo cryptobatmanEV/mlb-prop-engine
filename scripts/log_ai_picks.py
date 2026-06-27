@@ -27,6 +27,7 @@ OUTPUTS_DIR  = 'data/outputs'
 # ── Thresholds — keep in sync with AiPicks.tsx ─────────────────────────────
 MIN_ADJ_PROB = 0.12
 MIN_EDGE     = -0.03
+MAX_ODDS     = 500
 
 CREATE_TABLE = """
 CREATE TABLE IF NOT EXISTS hr_ai_picks_log (
@@ -100,19 +101,22 @@ def score_row(row) -> float | None:
     if adj_prob is None or adj_prob <= MIN_ADJ_PROB:
         return None
 
+    best_odds = _i(row.get('best_odds'))
+    if best_odds is None or best_odds > MAX_ODDS:
+        return None
+
     barrel  = _f(row.get('barrel_pct_15'))  or 0.0
     hardhit = _f(row.get('hardhit_pct_15')) or 0.0
-    park    = _f(row.get('hr_park_factor'))  or 100.0
     bo      = _i(row.get('bat_order'))
 
-    lineup_bonus = (0.03  if bo is not None and bo <= 3 else
-                    0.015 if bo is not None and bo <= 5 else 0.0)
+    lineup_bonus = (0.15 if bo is not None and bo <= 3 else
+                    0.08 if bo is not None and bo <= 5 else
+                    0.02 if bo is not None and bo <= 7 else 0.0)
 
     return (
         adj_prob * 5
         + (barrel  - 0.08) * 2
         + (hardhit - 0.35) * 1
-        + (park    - 100)  * 0.003
         + lineup_bonus
         + edge * 0.5
     )

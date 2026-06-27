@@ -38,6 +38,7 @@ type Pick = {
 function scorePick(row: Row): Pick | null {
   if (!row.has_line || row.edge == null || row.edge <= MIN_EDGE) return null;
   if (row.adj_prob == null || row.adj_prob <= MIN_ADJ_PROB) return null;
+  if (row.best_odds == null || row.best_odds > 500) return null;
 
   // Primary signal: who is most likely to homer tonight.
   const probScore = row.adj_prob * 5;
@@ -48,27 +49,23 @@ function scorePick(row: Row): Pick | null {
   const hardhit       = row.hardhit_pct_15 ?? 0;
   const hardHitBonus  = (hardhit - 0.35) * 1;
 
-  const park       = row.hr_park_factor ?? 100;
-  const parkBonus  = (park - 100) * 0.003;
-
   const bo           = row.bat_order;
-  const lineupBonus  = bo != null && bo <= 3 ? 0.03 : bo != null && bo <= 5 ? 0.015 : 0;
+  const lineupBonus  = bo != null && bo <= 3 ? 0.15 : bo != null && bo <= 5 ? 0.08 : bo != null && bo <= 7 ? 0.02 : 0;
 
   // Secondary signal: edge is a tiebreaker, not the driver.
   const edgeBonus = row.edge * 0.5;
 
-  const score = probScore + barrelBonus + hardHitBonus + parkBonus + lineupBonus + edgeBonus;
+  const score = probScore + barrelBonus + hardHitBonus + lineupBonus + edgeBonus;
 
   // Build a one-line "why", always leading with the HR probability itself.
   const supporting: { label: string; value: number }[] = [
-    { label: 'elite barrel rate',        value: barrel  >= 0.12 ? barrelBonus : 0 },
-    { label: 'consistent hard contact',  value: hardhit >= 0.45 ? hardHitBonus : 0 },
-    { label: 'HR-friendly park',         value: park    >= 105  ? parkBonus : 0 },
+    { label: 'elite barrel rate',       value: barrel  >= 0.12 ? barrelBonus : 0 },
+    { label: 'consistent hard contact', value: hardhit >= 0.45 ? hardHitBonus : 0 },
     {
-      label: bo != null && bo <= 3 ? 'top of the order' : 'middle of the lineup',
+      label: bo != null && bo <= 3 ? 'top of the order' : bo != null && bo <= 5 ? 'middle of the lineup' : 'lower lineup',
       value: lineupBonus > 0 ? lineupBonus : 0,
     },
-    { label: 'positive market edge',     value: row.edge > 0.02 ? edgeBonus : 0 },
+    { label: 'positive market edge',    value: row.edge > 0.02 ? edgeBonus : 0 },
   ];
 
   const top = supporting

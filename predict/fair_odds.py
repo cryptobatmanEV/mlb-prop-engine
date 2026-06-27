@@ -1065,18 +1065,16 @@ def run(date_str=None):
                           credits_remaining, len(already_priced_pks))
         return existing_df
 
-    # Refine adj_prob using actual batting order (replaces flat EXP_PA_DEFAULT)
+    # Update exp_pa/p_contact_game diagnostics using actual batting order
     if new_starters_df['bat_order'].notna().any():
         exp_pa = new_starters_df['bat_order'].map(EXP_PA_BY_ORDER).fillna(EXP_PA_DEFAULT)
         cr = new_starters_df.get('contact_rate', None)
-        mp = new_starters_df.get('model_prob', None)
-        if cr is not None and mp is not None:
+        if cr is not None:
             new_starters_df = new_starters_df.copy()
             new_starters_df['exp_pa'] = exp_pa
             new_starters_df['p_contact_game'] = 1 - (1 - new_starters_df['contact_rate'].fillna(0.7)) ** exp_pa
-            new_starters_df['adj_prob'] = new_starters_df['model_prob'] * new_starters_df['p_contact_game']
-            print(f"  Refined adj_prob using batting order "
-                  f"(exp_pa range: {exp_pa.min():.1f}-{exp_pa.max():.1f})")
+            print(f"  Updated exp_pa by batting order "
+                  f"(range: {exp_pa.min():.1f}-{exp_pa.max():.1f}), adj_prob = model_prob")
 
     # Tag batters with a HR in their last 5 games
     hot_batters = fetch_recent_hr_batters(date_str, set(new_starters_df['batter']))

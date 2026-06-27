@@ -607,8 +607,8 @@ def add_contact_adjustment(df, contact_df):
     # P(at least one batted ball in N PAs) = 1 - P(no contact in any PA)^N
     df['p_contact_game'] = 1 - (1 - df['contact_rate']) ** df['exp_pa']
 
-    # The fair-odds input probability — what Priority 4 will use
-    df['adj_prob'] = df['model_prob'] * df['p_contact_game']
+    # adj_prob = model_prob directly; p_contact_game kept as a diagnostic column
+    df['adj_prob'] = df['model_prob']
 
     return df
 
