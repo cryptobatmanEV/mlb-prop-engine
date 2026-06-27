@@ -334,7 +334,7 @@ export default function TrackerClient() {
               )}
             </div>
             <div style={{ ...LABEL, fontSize: '9px', color: 'rgba(255,255,255,0.25)', marginTop: '6px' }}>
-              FIRST MORNING ODDS SNAPSHOT PER PICK &nbsp;&middot;&nbsp; 1 UNIT FLAT STAKE &nbsp;&middot;&nbsp; ADJ% &gt; 12% &middot; EDGE &gt; −3% &middot; ODDS ≤ +500
+              FIRST MORNING ODDS SNAPSHOT PER PICK &nbsp;&middot;&nbsp; 1 UNIT FLAT STAKE &nbsp;&middot;&nbsp; ADJ% &gt; 12% &middot; EDGE &gt; −3% &middot; ADJ% &gt; BREAK-EVEN + 2%
             </div>
           </div>
         )}

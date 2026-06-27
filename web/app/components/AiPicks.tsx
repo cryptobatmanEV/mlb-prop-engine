@@ -38,7 +38,9 @@ type Pick = {
 function scorePick(row: Row): Pick | null {
   if (!row.has_line || row.edge == null || row.edge <= MIN_EDGE) return null;
   if (row.adj_prob == null || row.adj_prob <= MIN_ADJ_PROB) return null;
-  if (row.best_odds == null || row.best_odds > 500) return null;
+  if (row.best_odds == null) return null;
+  const breakEven = row.best_odds > 0 ? (100 / (row.best_odds + 100)) : (Math.abs(row.best_odds) / (Math.abs(row.best_odds) + 100));
+  if (row.adj_prob < breakEven + 0.02) return null;
 
   // Primary signal: who is most likely to homer tonight.
   const probScore = row.adj_prob * 5;
