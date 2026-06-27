@@ -18,7 +18,7 @@ Usage:
     python predict/fair_odds.py 2026-06-08   # specific date
 """
 
-import os, re, sys, time, unicodedata
+import os, pickle, re, sys, time, unicodedata
 import numpy as np
 import pandas as pd
 import requests
@@ -34,6 +34,7 @@ ODDS_BASE     = 'https://api.the-odds-api.com'
 PARLAY_BASE   = 'https://parlay-api.com/v1'
 PRED_DIR      = 'data/predictions'
 OUT_DIR       = 'data/outputs'
+CALIBRATOR_PATH = 'models/saved/hr_calibrator.pkl'
 
 # Feature flag: set ODDS_PROVIDER=parlay_api in .env to switch providers.
 # Defaults to odds_api so nothing changes until explicitly flipped.
@@ -702,6 +703,38 @@ def join_odds_and_edge(starters_df, best_odds_df):
     return df
 
 
+# ── Probability calibration ───────────────────────────────────────────────────
+
+def apply_calibration(df):
+    """
+    Load the isotonic regression calibrator and correct adj_prob bias in-place.
+    Skips gracefully if the calibrator file doesn't exist.
+    """
+    if not os.path.exists(CALIBRATOR_PATH):
+        print(f"  [calibration] {CALIBRATOR_PATH} not found -- skipping.")
+        return df
+
+    with open(CALIBRATOR_PATH, 'rb') as fh:
+        calibrator = pickle.load(fh)
+
+    df = df.copy()
+    raw = df['adj_prob'].fillna(0).values
+    cal = calibrator.transform(raw)
+
+    print(f"  [calibration] Bias corrected: mean adj_prob "
+          f"{raw.mean()*100:.1f}% -> {cal.mean()*100:.1f}%")
+
+    # Sample: top 5 players by raw adj_prob
+    top_locs = df['adj_prob'].nlargest(5).index
+    for idx in top_locs:
+        loc = df.index.get_loc(idx)
+        name = df.loc[idx, 'player_name'] if 'player_name' in df.columns else str(idx)
+        print(f"    {str(name):25s}  {raw[loc]*100:.1f}% -> {cal[loc]*100:.1f}%")
+
+    df['adj_prob'] = cal
+    return df
+
+
 # ── [9] Edge sanity check ─────────────────────────────────────────────────────
 
 def print_edge_sanity_check(df):
@@ -1139,6 +1172,10 @@ def run(date_str=None):
             print("\n[7] No new events to fetch odds for.")
 
     best_odds_df = _best_lines(all_odds_df)
+
+    # Apply isotonic regression calibration to adj_prob before edge is computed
+    print("\n[7b] Applying probability calibration...")
+    new_starters_df = apply_calibration(new_starters_df)
 
     # [8] Join odds + edge for new starters
     print("\n[8] Joining odds and computing edge...")
