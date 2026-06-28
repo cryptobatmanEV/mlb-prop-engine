@@ -16,6 +16,11 @@ const BOOK_LOGOS: Record<string, string> = {
   betmgm:     'https://www.betmgm.com/favicon.ico',
   prizepicks: 'https://www.prizepicks.com/favicon.ico',
   underdog:   'https://underdogfantasy.com/favicon.ico',
+  bet365:     'https://www.bet365.com/favicon.ico',
+  hardrock:   'https://www.hardrocksportsbook.com/favicon.ico',
+  parx:       'https://www.parxcasino.com/favicon.ico',
+  espnbet:    'https://espnbet.com/favicon.ico',
+  fliff:      'https://www.getfliff.com/favicon.ico',
 };
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -265,7 +270,7 @@ function getSortVal(row: Row, key: SortKey): string | number | null {
 
 // ── Book logo component ───────────────────────────────────────────────────────
 
-function BookLogo({ book, size = 16 }: { book: string | null | undefined; size?: number }) {
+function BookLogo({ book, size = 18 }: { book: string | null | undefined; size?: number }) {
   if (!book) return null;
   const src = BOOK_LOGOS[book.toLowerCase().trim()];
   if (!src) return null;
@@ -275,7 +280,15 @@ function BookLogo({ book, size = 16 }: { book: string | null | undefined; size?:
       alt={book}
       width={size}
       height={size}
-      style={{ borderRadius: '50%', objectFit: 'contain', flexShrink: 0, display: 'block' }}
+      style={{
+        width:         size,
+        height:        size,
+        borderRadius:  '50%',
+        objectFit:     'cover',
+        flexShrink:    0,
+        display:       'inline-block',
+        verticalAlign: 'middle',
+      }}
       onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
     />
   );
@@ -289,17 +302,17 @@ function DetailCard({ row, myLine }: { row: Row; myLine?: MyLineProps }) {
   const SEC: React.CSSProperties = {
     fontFamily:    'var(--font-mono)',
     fontSize:      '9px',
-    letterSpacing: '2.5px',
+    letterSpacing: '2px',
     textTransform: 'uppercase',
-    color:         'var(--ev-dim)',
-    marginBottom:  '10px',
+    color:         'rgba(255,255,255,0.4)',
+    marginBottom:  '12px',
   };
   const LBL: React.CSSProperties = {
     fontFamily:    'var(--font-mono)',
     fontSize:      '9px',
     letterSpacing: '1.5px',
     textTransform: 'uppercase',
-    color:         'var(--ev-dim)',
+    color:         'rgba(255,255,255,0.35)',
     marginBottom:  '4px',
   };
   const VAL: React.CSSProperties = {
@@ -307,8 +320,13 @@ function DetailCard({ row, myLine }: { row: Row; myLine?: MyLineProps }) {
     fontSize:   '13px',
     fontWeight: 500,
   };
+  const CARD: React.CSSProperties = {
+    background:   '#111416',
+    border:       '1px solid rgba(255,255,255,0.06)',
+    borderRadius: '3px',
+    padding:      '14px 16px',
+  };
 
-  // Parse book_markets JSON once
   const MARKET_BOOKS: { key: string; label: string }[] = [
     { key: 'pinnacle',   label: 'Pinnacle'   },
     { key: 'fanduel',    label: 'FanDuel'    },
@@ -316,105 +334,74 @@ function DetailCard({ row, myLine }: { row: Row; myLine?: MyLineProps }) {
     { key: 'draftkings', label: 'DraftKings' },
     { key: 'betrivers',  label: 'BetRivers'  },
     { key: 'betmgm',     label: 'BetMGM'     },
+    { key: 'bet365',     label: 'Bet365'     },
+    { key: 'hardrock',   label: 'Hard Rock'  },
   ];
   let parsedMarkets: Record<string, { odds: number }> = {};
   try {
     if (row.book_markets) parsedMarkets = JSON.parse(row.book_markets);
   } catch { /* ignore */ }
-  const hasMarkets = MARKET_BOOKS.some(b => parsedMarkets[b.key] != null);
+  const visibleBooks = MARKET_BOOKS.filter(b => parsedMarkets[b.key] != null);
 
   return (
     <div style={{
-      padding:       '16px 18px 20px 18px',
-      background:    '#0e1114',
+      padding:       '10px',
+      background:    '#0a0d0f',
       borderTop:     '1px solid var(--ev-border)',
       display:       'flex',
       flexDirection: 'column',
-      gap:           '24px',
+      gap:           '8px',
     }}>
 
-      {/* ── Row 1: MARKET ODDS + DFS LINES ── */}
-      <div style={{ display: 'flex', gap: '48px', flexWrap: 'wrap' }}>
-
-        {/* SECTION 1 — MARKET ODDS */}
-        <div>
-          <div style={SEC}>MARKET ODDS</div>
-          {hasMarkets ? (
-            <table style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  <th style={{ textAlign: 'left', color: 'var(--ev-dim)', padding: '0 28px 5px 0', fontSize: '9px', letterSpacing: '1.5px', fontWeight: 400 }}>BOOK</th>
-                  <th style={{ textAlign: 'right', color: 'var(--ev-dim)', padding: '0 0 5px 0', fontSize: '9px', letterSpacing: '1.5px', fontWeight: 400 }}>ODDS</th>
-                </tr>
-              </thead>
-              <tbody>
-                {MARKET_BOOKS.map(({ key, label }) => {
-                  const entry  = parsedMarkets[key];
-                  const oddsVal = entry?.odds ?? null;
-                  const display = oddsVal == null ? '—' : fmtOdds(oddsVal);
-                  const color   = oddsVal == null ? 'var(--ev-dim)'
-                    : oddsVal > 0 ? 'var(--ev-green)' : 'var(--ev-text)';
-                  return (
-                    <tr key={key}>
-                      <td style={{ padding: '4px 28px 4px 0', color: 'var(--ev-muted)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-                          <BookLogo book={key} size={14} />
-                          {label}
-                        </div>
-                      </td>
-                      <td style={{ textAlign: 'right', color, fontWeight: oddsVal != null ? 600 : 400 }}>
-                        {display}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          ) : (
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--ev-dim)', lineHeight: 1.6 }}>
-              Odds populate from the next pipeline run.
-            </div>
-          )}
-        </div>
-
-        {/* SECTION 2 — DFS LINES */}
-        <div>
-          <div style={SEC}>DFS LINES</div>
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-            {([
-              { key: 'prizepicks', label: 'PRIZEPICKS' },
-              { key: 'underdog',   label: 'UNDERDOG'   },
-            ] as const).map(({ key, label }) => (
-              <div key={key} style={{
-                background:   'rgba(255,255,255,0.03)',
-                border:       '1px solid var(--ev-border)',
-                borderRadius: '3px',
-                padding:      '10px 14px',
-                minWidth:     '106px',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '9px' }}>
-                  <BookLogo book={key} size={13} />
-                  <div style={{ ...LBL, marginBottom: 0, fontSize: '8px' }}>{label}</div>
-                </div>
-                <div style={LBL}>LINE</div>
-                <div style={{ ...VAL, color: 'var(--ev-dim)' }}>—</div>
-              </div>
-            ))}
+      {/* ── SECTION 1: MARKET ODDS ── */}
+      <div style={CARD}>
+        <div style={SEC}>MARKET ODDS</div>
+        {visibleBooks.length > 0 ? (
+          <table style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left', color: 'rgba(255,255,255,0.3)', padding: '0 28px 6px 0', fontSize: '9px', letterSpacing: '1.5px', fontWeight: 400 }}>BOOK</th>
+                <th style={{ textAlign: 'right', color: 'rgba(255,255,255,0.3)', padding: '0 0 6px 0', fontSize: '9px', letterSpacing: '1.5px', fontWeight: 400 }}>ODDS</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibleBooks.map(({ key, label }) => {
+                const oddsVal = parsedMarkets[key]?.odds ?? null;
+                const color   = oddsVal == null ? 'rgba(255,255,255,0.2)'
+                  : oddsVal > 0 ? 'var(--ev-green)' : 'var(--ev-text)';
+                return (
+                  <tr key={key}>
+                    <td style={{ padding: '4px 28px 4px 0', color: 'rgba(255,255,255,0.55)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                        <BookLogo book={key} size={14} />
+                        {label}
+                      </div>
+                    </td>
+                    <td style={{ textAlign: 'right', color, fontWeight: 600 }}>
+                      {oddsVal == null ? '—' : fmtOdds(oddsVal)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        ) : (
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'rgba(255,255,255,0.25)', lineHeight: 1.6 }}>
+            No market data — populates on next pipeline run.
           </div>
-        </div>
-
+        )}
       </div>
 
-      {/* ── Row 2: ADVANCED STATS ── */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+      {/* ── SECTION 2: ADVANCED STATS ── */}
+      <div style={CARD}>
 
-        {/* MY LINE at top of section 3 */}
+        {/* MY LINE */}
         {myLine && (
-          <div>
+          <div style={{ marginBottom: '16px', paddingBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
             <div style={SEC}>MY LINE</div>
             <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-end' }}>
               <div>
-                <div style={{ ...LBL, color: 'var(--ev-gold)' }}>MY ODDS</div>
+                <div style={{ ...LBL, color: 'rgba(255,200,0,0.7)' }}>MY ODDS</div>
                 <input
                   type="text"
                   placeholder="+350"
@@ -437,7 +424,7 @@ function DetailCard({ row, myLine }: { row: Row; myLine?: MyLineProps }) {
                 />
               </div>
               <div>
-                <div style={{ ...LBL, color: 'var(--ev-gold)' }}>MY EDGE</div>
+                <div style={{ ...LBL, color: 'rgba(255,200,0,0.7)' }}>MY EDGE</div>
                 <div style={{ ...VAL, color: myEdgeDisp!.color, fontWeight: myEdgeDisp!.weight }}>
                   {myEdgeDisp!.text}
                 </div>
@@ -446,40 +433,40 @@ function DetailCard({ row, myLine }: { row: Row; myLine?: MyLineProps }) {
           </div>
         )}
 
-        {/* BATTER L15 + PITCHER ALLOWED L10 */}
-        <div style={{ display: 'flex', gap: '40px', flexWrap: 'wrap' }}>
-          <div>
-            <div style={SEC}>BATTER L15</div>
-            <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-              {BATTER_STATS.map(({ key, label }) => {
-                const val = row[key as keyof Row] as number | null;
-                return (
-                  <div key={key} style={{ minWidth: '52px' }}>
-                    <div style={LBL}>{label}</div>
-                    <div style={{ ...VAL, color: statColor(key, val) }}>{fmtStat(key, val)}</div>
-                  </div>
-                );
-              })}
-            </div>
+        {/* BATTER L15 */}
+        <div style={{ marginBottom: '16px' }}>
+          <div style={SEC}>BATTER L15</div>
+          <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+            {BATTER_STATS.map(({ key, label }) => {
+              const val = row[key as keyof Row] as number | null;
+              return (
+                <div key={key} style={{ minWidth: '52px' }}>
+                  <div style={LBL}>{label}</div>
+                  <div style={{ ...VAL, color: statColor(key, val) }}>{fmtStat(key, val)}</div>
+                </div>
+              );
+            })}
           </div>
-          <div>
-            <div style={SEC}>PITCHER ALLOWED L10</div>
-            <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-              {PITCHER_STATS.map(({ key, label }) => {
-                const val = row[key as keyof Row] as number | null;
-                return (
-                  <div key={key} style={{ minWidth: '52px' }}>
-                    <div style={LBL}>{label}</div>
-                    <div style={{ ...VAL, color: statColor(key, val) }}>{fmtStat(key, val)}</div>
-                  </div>
-                );
-              })}
-            </div>
+        </div>
+
+        {/* PITCHER ALLOWED L10 */}
+        <div style={{ marginBottom: '16px' }}>
+          <div style={SEC}>PITCHER ALLOWED L10</div>
+          <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+            {PITCHER_STATS.map(({ key, label }) => {
+              const val = row[key as keyof Row] as number | null;
+              return (
+                <div key={key} style={{ minWidth: '52px' }}>
+                  <div style={LBL}>{label}</div>
+                  <div style={{ ...VAL, color: statColor(key, val) }}>{fmtStat(key, val)}</div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
         {/* CONTEXT */}
-        <div>
+        <div style={{ marginBottom: '16px' }}>
           <div style={SEC}>CONTEXT</div>
           <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
             {CONTEXT_STATS.map(({ key, label }) => {
@@ -495,10 +482,10 @@ function DetailCard({ row, myLine }: { row: Row; myLine?: MyLineProps }) {
         </div>
 
         {/* PLATOON SPLITS + BATTER VS PITCHER */}
-        <div style={{ display: 'flex', gap: '40px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '40px', flexWrap: 'wrap', marginBottom: '16px' }}>
           <div>
             <div style={SEC}>PLATOON SPLITS</div>
-            <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: '20px' }}>
               {PLATOON_STATS.map(({ key, label }) => (
                 <div key={key} style={{ minWidth: '40px' }}>
                   <div style={LBL}>{label}</div>
@@ -512,7 +499,7 @@ function DetailCard({ row, myLine }: { row: Row; myLine?: MyLineProps }) {
           <div>
             <div style={SEC}>BATTER VS PITCHER</div>
             {row.vs_pitcher_ab != null && row.vs_pitcher_ab > 0 ? (
-              <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: '20px' }}>
                 {VS_PITCHER_STATS.map(({ key, label }) => (
                   <div key={key} style={{ minWidth: '36px' }}>
                     <div style={LBL}>{label}</div>
@@ -523,7 +510,7 @@ function DetailCard({ row, myLine }: { row: Row; myLine?: MyLineProps }) {
                 ))}
               </div>
             ) : (
-              <div style={{ ...VAL, color: 'var(--ev-muted)', fontSize: '11px' }}>NO HISTORY</div>
+              <div style={{ ...VAL, color: 'rgba(255,255,255,0.25)', fontSize: '11px' }}>NO HISTORY</div>
             )}
           </div>
         </div>
@@ -543,9 +530,11 @@ function DetailCard({ row, myLine }: { row: Row; myLine?: MyLineProps }) {
             })}
           </div>
         </div>
+      </div>
 
-        {/* GAME ENVIRONMENT + GAME INFO */}
-        <div style={{ display: 'flex', gap: '40px', flexWrap: 'wrap', paddingTop: '14px', borderTop: '1px solid var(--ev-border)' }}>
+      {/* ── SECTION 3: GAME INFO ── */}
+      <div style={CARD}>
+        <div style={{ display: 'flex', gap: '40px', flexWrap: 'wrap' }}>
           <div>
             <div style={SEC}>GAME ENVIRONMENT</div>
             <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
@@ -581,8 +570,8 @@ function DetailCard({ row, myLine }: { row: Row; myLine?: MyLineProps }) {
             </div>
           </div>
         </div>
-
       </div>
+
     </div>
   );
 }
@@ -957,8 +946,8 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                       {/* BOOK — logo + odds */}
                       <td style={{ padding: '14px var(--cell-px)', textAlign: 'right' }}>
                         {row.has_line ? (
-                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end' }}>
-                            <BookLogo book={row.best_book} size={16} />
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', justifyContent: 'flex-end' }}>
+                            <BookLogo book={row.best_book} size={18} />
                             <span style={{ color: 'var(--ev-blue)', fontWeight: 600, fontSize: '13px' }}>
                               {fmtOdds(row.best_odds)}
                             </span>
@@ -1163,8 +1152,8 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                     </div>
                     <div>
                       <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--ev-dim)', marginBottom: '5px' }}>BOOK</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        {row.has_line && <BookLogo book={row.best_book} size={14} />}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                        {row.has_line && <BookLogo book={row.best_book} size={18} />}
                         <div style={{ fontFamily: 'var(--font-mono)', fontSize: '14px', fontWeight: 600, color: row.has_line ? 'var(--ev-blue)' : 'var(--ev-dim)' }}>
                           {row.has_line ? fmtOdds(row.best_odds) : '—'}
                         </div>
