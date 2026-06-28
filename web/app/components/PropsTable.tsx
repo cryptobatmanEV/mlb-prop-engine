@@ -69,6 +69,8 @@ export type Row = {
   // Game info for detail card
   game_time: string | null;
   stadium: string | null;
+  // Per-book market odds for detail card
+  book_markets: string | null;
 };
 
 type SortKey =
@@ -442,6 +444,46 @@ function DetailCard({ row }: { row: Row }) {
                 {row.stadium ?? '—'}
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Divider */}
+        <div style={{
+          width: '1px', background: 'var(--ev-border)',
+          alignSelf: 'stretch', margin: '0 4px',
+        }} />
+
+        {/* Market odds section */}
+        <div>
+          <div style={SECTION_LABEL}>MARKET ODDS</div>
+          <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+            {(() => {
+              const BOOKS: { key: string; label: string }[] = [
+                { key: 'pinnacle',   label: 'PINNACLE'  },
+                { key: 'fanduel',    label: 'FANDUEL'   },
+                { key: 'novig',      label: 'NOVIG'     },
+                { key: 'draftkings', label: 'DRAFTKINGS' },
+                { key: 'betrivers',  label: 'BETRIVERS' },
+                { key: 'betmgm',     label: 'BETMGM'    },
+              ];
+              let parsed: Record<string, { odds: number }> = {};
+              try {
+                if (row.book_markets) parsed = JSON.parse(row.book_markets);
+              } catch { /* ignore */ }
+              return BOOKS.map(({ key, label }) => {
+                const entry = parsed[key];
+                const oddsVal = entry?.odds ?? null;
+                const display = oddsVal == null ? '—' : oddsVal > 0 ? `+${oddsVal}` : String(oddsVal);
+                return (
+                  <div key={key} style={{ minWidth: '64px' }}>
+                    <div style={STAT_LABEL}>{label}</div>
+                    <div style={{ ...STAT_VAL, color: oddsVal == null ? 'var(--ev-dim)' : 'var(--ev-blue)' }}>
+                      {display}
+                    </div>
+                  </div>
+                );
+              });
+            })()}
           </div>
         </div>
 

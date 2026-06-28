@@ -112,6 +112,7 @@ MIGRATE_HR_PREDICTIONS = [
     # Results columns — written by log_results.py, never overwritten by the pipeline upsert
     "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS hit_hr BOOLEAN",
     "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS actual_hr_count INTEGER",
+    "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS book_markets TEXT",
 ]
 
 CREATE_TABLE = """
@@ -174,6 +175,7 @@ CREATE TABLE IF NOT EXISTS hr_predictions (
     stadium         TEXT,
     hit_hr          BOOLEAN,
     actual_hr_count INTEGER,
+    book_markets    TEXT,
     created_at      TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE (game_date, batter, game_id)
 );
@@ -193,7 +195,8 @@ INSERT INTO hr_predictions (
     pitcher_era, pitcher_hr9, pitcher_hr_allowed, pitcher_ip,
     vs_pitcher_ab, vs_pitcher_h, vs_pitcher_hr, vs_pitcher_avg,
     hr_vs_r, hr_vs_l,
-    humidity_pct, precip_pct, wind_description, game_time, stadium
+    humidity_pct, precip_pct, wind_description, game_time, stadium,
+    book_markets
 ) VALUES (
     %(game_date)s, %(batter)s, %(game_id)s,
     %(player_name)s, %(team_abbr)s, %(stand)s, %(pitcher_name)s, %(p_throws)s,
@@ -209,7 +212,8 @@ INSERT INTO hr_predictions (
     %(pitcher_era)s, %(pitcher_hr9)s, %(pitcher_hr_allowed)s, %(pitcher_ip)s,
     %(vs_pitcher_ab)s, %(vs_pitcher_h)s, %(vs_pitcher_hr)s, %(vs_pitcher_avg)s,
     %(hr_vs_r)s, %(hr_vs_l)s,
-    %(humidity_pct)s, %(precip_pct)s, %(wind_description)s, %(game_time)s, %(stadium)s
+    %(humidity_pct)s, %(precip_pct)s, %(wind_description)s, %(game_time)s, %(stadium)s,
+    %(book_markets)s
 )
 ON CONFLICT (game_date, batter, game_id) DO UPDATE SET
     player_name              = EXCLUDED.player_name,
@@ -259,6 +263,7 @@ ON CONFLICT (game_date, batter, game_id) DO UPDATE SET
     wind_description         = EXCLUDED.wind_description,
     game_time                = EXCLUDED.game_time,
     stadium                  = EXCLUDED.stadium,
+    book_markets = CASE WHEN EXCLUDED.has_line IS TRUE THEN EXCLUDED.book_markets ELSE hr_predictions.book_markets END,
     created_at               = NOW();
 """
 
@@ -396,6 +401,7 @@ def run(date_str=None):
                         'wind_description': _str(row.get('wind_description')),
                         'game_time':        _str(row.get('game_time')),
                         'stadium':          _str(row.get('stadium')),
+                        'book_markets':     _str(row.get('book_markets')),
                     })
         print(f"  Done -- {len(df)} rows upserted.")
     finally:

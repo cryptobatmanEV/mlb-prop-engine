@@ -460,6 +460,32 @@ def _best_lines(all_df):
             .first())
 
 
+def build_book_markets(all_df):
+    """
+    Returns {name_norm: JSON_str} with per-book HR prop odds.
+    Format: {"pinnacle": {"odds": 350}, "fanduel": {"odds": 380}, ...}
+    Only books that have data for a player are included.
+    """
+    import json, math as _math
+    if all_df.empty:
+        return {}
+    result = {}
+    for name_norm, grp in all_df.groupby('name_norm'):
+        books = {}
+        for _, r in grp.iterrows():
+            bk   = str(r.get('bookmaker', '')).lower().strip()
+            odds = r.get('odds_american')
+            if bk and odds is not None:
+                try:
+                    if not _math.isnan(float(odds)):
+                        books[bk] = {'odds': int(odds)}
+                except (TypeError, ValueError):
+                    pass
+        if books:
+            result[name_norm] = json.dumps(books)
+    return result
+
+
 # ── [5-7 alt] ParlayAPI: bookmaker-split props fetch (9 credits total) ───────
 #
 # Split into 3 calls by bookmaker group so each response stays well under the
@@ -831,6 +857,7 @@ def save_output(df, date_str):
         'vs_pitcher_ab', 'vs_pitcher_h', 'vs_pitcher_hr', 'vs_pitcher_avg',
         'hr_vs_r', 'hr_vs_l',
         'game_date', 'game_id', 'batter',
+        'book_markets',
     ]
     save_cols = [c for c in out_cols if c in df.columns]
 
@@ -1171,7 +1198,8 @@ def run(date_str=None):
         else:
             print("\n[7] No new events to fetch odds for.")
 
-    best_odds_df = _best_lines(all_odds_df)
+    best_odds_df     = _best_lines(all_odds_df)
+    book_markets_map = build_book_markets(all_odds_df)
 
     # Apply isotonic regression calibration to adj_prob before edge is computed
     print("\n[7b] Applying probability calibration...")
@@ -1180,6 +1208,13 @@ def run(date_str=None):
     # [8] Join odds + edge for new starters
     print("\n[8] Joining odds and computing edge...")
     new_result_df = join_odds_and_edge(new_starters_df, best_odds_df)
+
+    # Attach per-book odds JSON to each row
+    if book_markets_map:
+        new_result_df = new_result_df.copy()
+        new_result_df['book_markets'] = (
+            new_result_df['player_name'].apply(norm_name).map(book_markets_map)
+        )
 
     # Map event_id -> game_pk -> game_total and attach to each row
     if game_totals:
