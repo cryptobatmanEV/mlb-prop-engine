@@ -8,19 +8,13 @@ import { useIframeIdentity, identityHeaders } from '../lib/iframeIdentity';
 // ── Book logos ────────────────────────────────────────────────────────────────
 
 const BOOK_LOGOS: Record<string, string> = {
-  pinnacle:   'https://www.pinnacle.com/favicon.ico',
-  fanduel:    'https://www.fanduel.com/favicon.ico',
-  draftkings: 'https://www.draftkings.com/favicon.ico',
-  betrivers:  'https://www.betrivers.com/favicon.ico',
-  novig:      'https://www.novig.us/favicon.ico',
-  betmgm:     'https://www.betmgm.com/favicon.ico',
-  prizepicks: 'https://www.prizepicks.com/favicon.ico',
-  underdog:   'https://underdogfantasy.com/favicon.ico',
-  bet365:     'https://www.bet365.com/favicon.ico',
-  hardrock:   'https://www.hardrocksportsbook.com/favicon.ico',
-  parx:       'https://www.parxcasino.com/favicon.ico',
-  espnbet:    'https://espnbet.com/favicon.ico',
-  fliff:      'https://www.getfliff.com/favicon.ico',
+  pinnacle:   'https://logo.clearbit.com/pinnacle.com',
+  fanduel:    'https://logo.clearbit.com/fanduel.com',
+  draftkings: 'https://logo.clearbit.com/draftkings.com',
+  betrivers:  'https://logo.clearbit.com/betrivers.com',
+  novig:      'https://logo.clearbit.com/novig.us',
+  betmgm:     'https://logo.clearbit.com/betmgm.com',
+  bet365:     'https://logo.clearbit.com/bet365.com',
 };
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -334,14 +328,11 @@ function DetailCard({ row, myLine }: { row: Row; myLine?: MyLineProps }) {
     { key: 'draftkings', label: 'DraftKings' },
     { key: 'betrivers',  label: 'BetRivers'  },
     { key: 'betmgm',     label: 'BetMGM'     },
-    { key: 'bet365',     label: 'Bet365'     },
-    { key: 'hardrock',   label: 'Hard Rock'  },
   ];
   let parsedMarkets: Record<string, { odds: number }> = {};
   try {
     if (row.book_markets) parsedMarkets = JSON.parse(row.book_markets);
   } catch { /* ignore */ }
-  const visibleBooks = MARKET_BOOKS.filter(b => parsedMarkets[b.key] != null);
 
   return (
     <div style={{
@@ -356,40 +347,34 @@ function DetailCard({ row, myLine }: { row: Row; myLine?: MyLineProps }) {
       {/* ── SECTION 1: MARKET ODDS ── */}
       <div style={CARD}>
         <div style={SEC}>MARKET ODDS</div>
-        {visibleBooks.length > 0 ? (
-          <table style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>
-                <th style={{ textAlign: 'left', color: 'rgba(255,255,255,0.3)', padding: '0 28px 6px 0', fontSize: '9px', letterSpacing: '1.5px', fontWeight: 400 }}>BOOK</th>
-                <th style={{ textAlign: 'right', color: 'rgba(255,255,255,0.3)', padding: '0 0 6px 0', fontSize: '9px', letterSpacing: '1.5px', fontWeight: 400 }}>ODDS</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibleBooks.map(({ key, label }) => {
-                const oddsVal = parsedMarkets[key]?.odds ?? null;
-                const color   = oddsVal == null ? 'rgba(255,255,255,0.2)'
-                  : oddsVal > 0 ? 'var(--ev-green)' : 'var(--ev-text)';
-                return (
-                  <tr key={key}>
-                    <td style={{ padding: '4px 28px 4px 0', color: 'rgba(255,255,255,0.55)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-                        <BookLogo book={key} size={14} />
-                        {label}
-                      </div>
-                    </td>
-                    <td style={{ textAlign: 'right', color, fontWeight: 600 }}>
-                      {oddsVal == null ? '—' : fmtOdds(oddsVal)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        ) : (
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'rgba(255,255,255,0.25)', lineHeight: 1.6 }}>
-            No market data — populates on next pipeline run.
-          </div>
-        )}
+        <table style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <th style={{ textAlign: 'left', color: 'rgba(255,255,255,0.3)', padding: '0 28px 6px 0', fontSize: '9px', letterSpacing: '1.5px', fontWeight: 400 }}>BOOK</th>
+              <th style={{ textAlign: 'right', color: 'rgba(255,255,255,0.3)', padding: '0 0 6px 0', fontSize: '9px', letterSpacing: '1.5px', fontWeight: 400 }}>ODDS</th>
+            </tr>
+          </thead>
+          <tbody>
+            {MARKET_BOOKS.map(({ key, label }) => {
+              const oddsVal = parsedMarkets[key]?.odds ?? null;
+              const color   = oddsVal == null ? 'rgba(255,255,255,0.2)'
+                : oddsVal > 0 ? 'var(--ev-green)' : 'var(--ev-text)';
+              return (
+                <tr key={key}>
+                  <td style={{ padding: '4px 28px 4px 0', color: 'rgba(255,255,255,0.55)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                      <BookLogo book={key} size={14} />
+                      {label}
+                    </div>
+                  </td>
+                  <td style={{ textAlign: 'right', color, fontWeight: oddsVal != null ? 600 : 400 }}>
+                    {oddsVal == null ? '—' : fmtOdds(oddsVal)}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
 
       {/* ── SECTION 2: ADVANCED STATS ── */}
