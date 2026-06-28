@@ -260,6 +260,20 @@ function toISODate(d: unknown): string {
 
 function fmtProb(p: number): string { return (p * 100).toFixed(1) + '%'; }
 
+function parseWind(desc: string | null | undefined): { label: string; color: string } {
+  if (!desc) return { label: '—', color: 'var(--ev-dim)' };
+  const d = desc.trim().toUpperCase();
+  if (d === 'DOME') return { label: 'DOME', color: 'var(--ev-dim)' };
+  if (d === 'CALM') return { label: 'CALM', color: 'var(--ev-dim)' };
+  const m = d.match(/(\d+)\s*MPH/);
+  const spd = m ? m[1] : null;
+  if (!spd) return { label: '—', color: 'var(--ev-dim)' };
+  if (d.includes('TOWARD OF')) return { label: `↑${spd}`, color: 'var(--ev-green)' };
+  if (d.includes('TOWARD HP')) return { label: `↓${spd}`, color: 'var(--ev-red)' };
+  if (d.includes('CROSSWIND'))  return { label: `↔${spd}`, color: 'var(--ev-muted)' };
+  return { label: spd, color: 'var(--ev-muted)' };
+}
+
 function adjProbColor(p: number): string {
   if (p >= 0.18) return 'var(--ev-green)';
   if (p >= 0.14) return 'var(--ev-gold)';
@@ -581,7 +595,7 @@ function DetailCard({ row, myLine }: { row: Row; myLine?: MyLineProps }) {
               </div>
               <div style={{ minWidth: '80px' }}>
                 <div style={LBL}>WIND</div>
-                <div style={{ ...VAL, color: 'var(--ev-text)' }}>{row.wind_description ?? '—'}</div>
+                {(() => { const w = parseWind(row.wind_description); return <div style={{ ...VAL, color: w.color }}>{w.label}</div>; })()}
               </div>
             </div>
           </div>
@@ -1005,8 +1019,8 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                       </td>
 
                       {/* WIND */}
-                      <td style={{ padding: '14px var(--cell-px)', color: 'var(--ev-dim)', fontSize: '11px', whiteSpace: 'nowrap', maxWidth: '110px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {row.wind_description || '—'}
+                      <td style={{ padding: '14px var(--cell-px)', fontSize: '13px', fontWeight: 600, fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
+                        {(() => { const w = parseWind(row.wind_description); return <span style={{ color: w.color }}>{w.label}</span>; })()}
                       </td>
 
                       {/* MY LINE */}
@@ -1233,14 +1247,17 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                           </span>
                         </div>
                       )}
-                      {row.wind_description && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '3px 9px' }}>
-                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '1.2px', textTransform: 'uppercase', color: 'var(--ev-dim)' }}>WIND</span>
-                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: 500, color: 'var(--ev-muted)' }}>
-                            {row.wind_description}
-                          </span>
-                        </div>
-                      )}
+                      {row.wind_description && (() => {
+                        const w = parseWind(row.wind_description);
+                        return (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '3px 9px' }}>
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '1.2px', textTransform: 'uppercase', color: 'var(--ev-dim)' }}>WIND</span>
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 600, color: w.color }}>
+                              {w.label}
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
 
