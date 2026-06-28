@@ -164,19 +164,28 @@ const PITCHER_STATS: { key: StatKey; label: string }[] = [
   { key: 'p_hr_per_bb_allowed_10',   label: 'HR/BB ALLOWED'     },
 ];
 
-type ContextKey = 'season_hr' | 'days_since_hr' | 'p_fip' | 'game_total';
+type ContextKey = 'season_hr' | 'days_since_hr' | 'p_fip' | 'game_total' | 'hr_park_factor';
 
 const CONTEXT_STATS: { key: ContextKey; label: string }[] = [
-  { key: 'season_hr',     label: 'SZN HR'       },
-  { key: 'days_since_hr', label: 'DAYS SINCE HR' },
-  { key: 'p_fip',         label: 'PITCHER FIP'  },
-  { key: 'game_total',    label: 'O/U'          },
+  { key: 'season_hr',      label: 'SZN HR'       },
+  { key: 'days_since_hr',  label: 'DAYS SINCE HR' },
+  { key: 'hr_park_factor', label: 'PARK FACTOR'  },
+  { key: 'p_fip',          label: 'PITCHER FIP'  },
+  { key: 'game_total',     label: 'O/U'          },
 ];
 
 function fmtContext(key: ContextKey, val: number | null): string {
   if (val == null || isNaN(val)) return '—';
   if (key === 'p_fip' || key === 'game_total') return val.toFixed(2);
   return String(Math.round(val));
+}
+
+function contextColor(key: ContextKey, val: number | null): string {
+  if (key === 'hr_park_factor' && val != null) {
+    if (val > 105) return 'var(--ev-green)';
+    if (val < 95)  return 'var(--ev-red)';
+  }
+  return 'var(--ev-text)';
 }
 
 type PitcherProfileKey = 'pitcher_era' | 'pitcher_hr9' | 'pitcher_hr_allowed' | 'pitcher_ip';
@@ -494,7 +503,7 @@ function DetailCard({ row, myLine }: { row: Row; myLine?: MyLineProps }) {
               return (
                 <div key={key} style={{ minWidth: '52px' }}>
                   <div style={LBL}>{label}</div>
-                  <div style={{ ...VAL, color: 'var(--ev-text)' }}>{fmtContext(key, val)}</div>
+                  <div style={{ ...VAL, color: contextColor(key, val) }}>{fmtContext(key, val)}</div>
                 </div>
               );
             })}
