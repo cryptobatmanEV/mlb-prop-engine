@@ -647,6 +647,8 @@ const COLS: ColDef[] = [
   { key: 'fair_odds',    label: 'FAIR',    align: 'right' },
   { key: 'best_odds',    label: 'BOOK',    align: 'right' },
   { key: 'edge',         label: 'EDGE',    align: 'right' },
+  { key: null,           label: 'PARK',    align: 'right' },
+  { key: null,           label: 'WIND',    align: 'left'  },
   { key: null,           label: 'MY LINE', align: 'right' },
   { key: null,           label: '',        align: 'right' },
 ];
@@ -991,6 +993,22 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                         {edgeText}
                       </td>
 
+                      {/* PARK */}
+                      <td style={{
+                        padding: '14px var(--cell-px)', textAlign: 'right', fontSize: '11px', fontWeight: 500,
+                        color: row.hr_park_factor == null ? 'var(--ev-dim)'
+                          : row.hr_park_factor > 105 ? 'var(--ev-green)'
+                          : row.hr_park_factor < 95  ? 'var(--ev-red)'
+                          : 'var(--ev-muted)',
+                      }}>
+                        {row.hr_park_factor == null ? '—' : Math.round(row.hr_park_factor)}
+                      </td>
+
+                      {/* WIND */}
+                      <td style={{ padding: '14px var(--cell-px)', color: 'var(--ev-dim)', fontSize: '11px', whiteSpace: 'nowrap', maxWidth: '110px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {row.wind_description || '—'}
+                      </td>
+
                       {/* MY LINE */}
                       <td style={{ padding: '8px 10px', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
                         <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
@@ -1200,6 +1218,31 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                       </span>
                     </div>
                   </div>
+
+                  {/* PARK + WIND chips */}
+                  {(row.hr_park_factor != null || row.wind_description) && (
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                      {row.hr_park_factor != null && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '3px 9px' }}>
+                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '1.2px', textTransform: 'uppercase', color: 'var(--ev-dim)' }}>PARK</span>
+                          <span style={{
+                            fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: 600,
+                            color: row.hr_park_factor > 105 ? 'var(--ev-green)' : row.hr_park_factor < 95 ? 'var(--ev-red)' : 'var(--ev-muted)',
+                          }}>
+                            {Math.round(row.hr_park_factor)}
+                          </span>
+                        </div>
+                      )}
+                      {row.wind_description && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '3px 9px' }}>
+                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '1.2px', textTransform: 'uppercase', color: 'var(--ev-dim)' }}>WIND</span>
+                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: 500, color: 'var(--ev-muted)' }}>
+                            {row.wind_description}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* MY LINE + TRACK */}
                   <div style={{ display: 'flex', alignItems: 'flex-end', gap: '16px', paddingTop: '12px', borderTop: '1px solid var(--ev-border)' }}>
