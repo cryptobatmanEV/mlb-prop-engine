@@ -242,14 +242,16 @@ def grade_ai_picks_log(date_str, pred_df):
     """
     After results are confirmed, stamp actual_hr and result onto every
     hr_ai_picks_log row for this game_date that hasn't been graded yet.
+
+    Two-pass approach:
+    1. Grade from pred_df (boxscore results fetched this run).
+    2. Fallback: UPDATE via hr_predictions.hit_hr JOIN — catches players that
+       were missed by the boxscore fetch (hit_hr=-1) but later got results
+       written to hr_predictions from another run.
     """
     import psycopg2
     db_url = os.getenv('DATABASE_URL')
     if not db_url:
-        return
-
-    known = pred_df[pred_df['hit_hr'] >= 0][['batter', 'actual_hr_count']].copy()
-    if known.empty:
         return
 
     try:
@@ -258,6 +260,8 @@ def grade_ai_picks_log(date_str, pred_df):
             updated = 0
             with conn:
                 with conn.cursor() as cur:
+                    # Pass 1: grade from pred_df results
+                    known = pred_df[pred_df['hit_hr'] >= 0][['batter', 'actual_hr_count']].copy()
                     for _, row in known.iterrows():
                         actual_hr = int(row['actual_hr_count'])
                         result    = 'HIT' if actual_hr > 0 else 'MISS'
@@ -273,8 +277,29 @@ def grade_ai_picks_log(date_str, pred_df):
                             (actual_hr, result, date_str, int(row['batter'])),
                         )
                         updated += cur.rowcount
+
+                    # Pass 2: fallback — grade via hr_predictions.hit_hr for
+                    # any picks still ungraded (e.g. batter missed in boxscore fetch)
+                    cur.execute(
+                        """
+                        UPDATE hr_ai_picks_log al
+                           SET actual_hr = CASE WHEN hp.hit_hr IS TRUE THEN 1 ELSE 0 END,
+                               result    = CASE WHEN hp.hit_hr IS TRUE THEN 'HIT' ELSE 'MISS' END
+                          FROM hr_predictions hp
+                         WHERE al.game_date = hp.game_date
+                           AND al.batter    = hp.batter
+                           AND al.result    IS NULL
+                           AND al.game_date = %s
+                           AND hp.hit_hr    IS NOT NULL
+                        """,
+                        (date_str,),
+                    )
+                    updated += cur.rowcount
+
             if updated:
                 print(f"  Graded {updated} AI pick(s) in hr_ai_picks_log.")
+            else:
+                print(f"  No ungraded AI picks for {date_str}.")
         finally:
             conn.close()
     except Exception as e:
@@ -337,7 +362,11 @@ def run(date_str=None, force_db=False):
     # Guard against logging the same date twice
     if already_logged(date_str):
         if not force_db:
-            print(f"\n  {date_str} is already in the log. Nothing to do.")
+            print(f"\n  {date_str} is already in the log.")
+            # Still grade any AI picks that were logged after results were recorded
+            log = pd.read_csv(LOG_PATH)
+            pred_df_log = log[log['game_date'].astype(str) == str(date_str)].copy()
+            grade_ai_picks_log(date_str, pred_df_log)
             print_calibration_summary()
             return
 
