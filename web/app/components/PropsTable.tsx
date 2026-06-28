@@ -7,14 +7,24 @@ import { useIframeIdentity, identityHeaders } from '../lib/iframeIdentity';
 
 // ── Book logos ────────────────────────────────────────────────────────────────
 
-const BOOK_LOGOS: Record<string, string> = {
-  pinnacle:   'https://logo.clearbit.com/pinnacle.com',
-  fanduel:    'https://logo.clearbit.com/fanduel.com',
-  draftkings: 'https://logo.clearbit.com/draftkings.com',
-  betrivers:  'https://logo.clearbit.com/betrivers.com',
-  novig:      'https://logo.clearbit.com/novig.us',
-  betmgm:     'https://logo.clearbit.com/betmgm.com',
-  bet365:     'https://logo.clearbit.com/bet365.com',
+const LOGO_URLS: Record<string, string[]> = {
+  pinnacle:   ['https://cdn.brandfetch.io/pinnacle.com/w/400/h/400',   'https://www.google.com/s2/favicons?domain=pinnacle.com&sz=32'],
+  fanduel:    ['https://cdn.brandfetch.io/fanduel.com/w/400/h/400',    'https://www.google.com/s2/favicons?domain=fanduel.com&sz=32'],
+  draftkings: ['https://cdn.brandfetch.io/draftkings.com/w/400/h/400', 'https://www.google.com/s2/favicons?domain=draftkings.com&sz=32'],
+  betrivers:  ['https://cdn.brandfetch.io/betrivers.com/w/400/h/400',  'https://www.google.com/s2/favicons?domain=betrivers.com&sz=32'],
+  novig:      ['https://cdn.brandfetch.io/novig.us/w/400/h/400',       'https://www.google.com/s2/favicons?domain=novig.us&sz=32'],
+  betmgm:     ['https://cdn.brandfetch.io/betmgm.com/w/400/h/400',    'https://www.google.com/s2/favicons?domain=betmgm.com&sz=32'],
+  bet365:     ['https://cdn.brandfetch.io/bet365.com/w/400/h/400',     'https://www.google.com/s2/favicons?domain=bet365.com&sz=32'],
+};
+
+const BOOK_BADGE_COLORS: Record<string, string> = {
+  pinnacle:   '#ffcc00',
+  fanduel:    '#1493ff',
+  draftkings: '#53d338',
+  betrivers:  '#e31c1c',
+  novig:      '#7c3aed',
+  betmgm:     '#bf9b30',
+  bet365:     '#027b5b',
 };
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -265,13 +275,38 @@ function getSortVal(row: Row, key: SortKey): string | number | null {
 // ── Book logo component ───────────────────────────────────────────────────────
 
 function BookLogo({ book, size = 18 }: { book: string | null | undefined; size?: number }) {
-  if (!book) return null;
-  const src = BOOK_LOGOS[book.toLowerCase().trim()];
-  if (!src) return null;
+  const [urlIdx, setUrlIdx] = useState(0);
+  const key   = (book ?? '').toLowerCase().trim();
+  const urls  = LOGO_URLS[key];
+  const badge = BOOK_BADGE_COLORS[key] ?? 'rgba(255,255,255,0.15)';
+  const letter = key.charAt(0).toUpperCase() || '?';
+
+  useEffect(() => { setUrlIdx(0); }, [key]);
+
+  const badgeStyle: React.CSSProperties = {
+    width:          size,
+    height:         size,
+    borderRadius:   '50%',
+    flexShrink:     0,
+    display:        'inline-flex',
+    alignItems:     'center',
+    justifyContent: 'center',
+    verticalAlign:  'middle',
+    fontSize:       Math.round(size * 0.48),
+    fontWeight:     700,
+    color:          '#fff',
+    fontFamily:     'var(--font-mono)',
+    lineHeight:     1,
+  };
+
+  if (!urls || urlIdx >= urls.length) {
+    return <span style={{ ...badgeStyle, background: urls ? badge : 'rgba(255,255,255,0.15)' }}>{letter}</span>;
+  }
+
   return (
     <img
-      src={src}
-      alt={book}
+      src={urls[urlIdx]}
+      alt={key}
       width={size}
       height={size}
       style={{
@@ -283,7 +318,7 @@ function BookLogo({ book, size = 18 }: { book: string | null | undefined; size?:
         display:       'inline-block',
         verticalAlign: 'middle',
       }}
-      onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+      onError={() => setUrlIdx(i => i + 1)}
     />
   );
 }
@@ -296,10 +331,10 @@ function DetailCard({ row, myLine }: { row: Row; myLine?: MyLineProps }) {
   const SEC: React.CSSProperties = {
     fontFamily:    'var(--font-mono)',
     fontSize:      '9px',
-    letterSpacing: '2px',
+    letterSpacing: '1.5px',
     textTransform: 'uppercase',
     color:         'rgba(255,255,255,0.4)',
-    marginBottom:  '12px',
+    marginBottom:  '8px',
   };
   const LBL: React.CSSProperties = {
     fontFamily:    'var(--font-mono)',
@@ -307,7 +342,7 @@ function DetailCard({ row, myLine }: { row: Row; myLine?: MyLineProps }) {
     letterSpacing: '1.5px',
     textTransform: 'uppercase',
     color:         'rgba(255,255,255,0.35)',
-    marginBottom:  '4px',
+    marginBottom:  '3px',
   };
   const VAL: React.CSSProperties = {
     fontFamily: 'var(--font-mono)',
@@ -318,7 +353,7 @@ function DetailCard({ row, myLine }: { row: Row; myLine?: MyLineProps }) {
     background:   '#111416',
     border:       '1px solid rgba(255,255,255,0.06)',
     borderRadius: '3px',
-    padding:      '14px 16px',
+    padding:      '10px 12px',
   };
 
   const MARKET_BOOKS: { key: string; label: string }[] = [
@@ -336,12 +371,12 @@ function DetailCard({ row, myLine }: { row: Row; myLine?: MyLineProps }) {
 
   return (
     <div style={{
-      padding:       '10px',
+      padding:       '8px',
       background:    '#0a0d0f',
       borderTop:     '1px solid var(--ev-border)',
       display:       'flex',
       flexDirection: 'column',
-      gap:           '8px',
+      gap:           '6px',
     }}>
 
       {/* ── SECTION 1: MARKET ODDS ── */}
@@ -382,7 +417,7 @@ function DetailCard({ row, myLine }: { row: Row; myLine?: MyLineProps }) {
 
         {/* MY LINE */}
         {myLine && (
-          <div style={{ marginBottom: '16px', paddingBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+          <div style={{ marginBottom: '10px', paddingBottom: '10px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
             <div style={SEC}>MY LINE</div>
             <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-end' }}>
               <div>
