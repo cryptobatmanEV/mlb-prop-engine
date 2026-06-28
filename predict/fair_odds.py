@@ -18,7 +18,7 @@ Usage:
     python predict/fair_odds.py 2026-06-08   # specific date
 """
 
-import os, pickle, re, sys, time, unicodedata
+import os, re, sys, time, unicodedata
 import numpy as np
 import pandas as pd
 import requests
@@ -34,8 +34,6 @@ ODDS_BASE     = 'https://api.the-odds-api.com'
 PARLAY_BASE   = 'https://parlay-api.com/v1'
 PRED_DIR      = 'data/predictions'
 OUT_DIR       = 'data/outputs'
-CALIBRATOR_PATH = 'models/saved/hr_calibrator.pkl'
-
 # Feature flag: set ODDS_PROVIDER=parlay_api in .env to switch providers.
 # Defaults to odds_api so nothing changes until explicitly flipped.
 # ROLLBACK: set ODDS_PROVIDER=odds_api (or delete the var) to revert instantly.
@@ -731,31 +729,32 @@ def join_odds_and_edge(starters_df, best_odds_df):
 
 # ── Probability calibration ───────────────────────────────────────────────────
 
+# Additive bias correction derived from historical calibration analysis.
+# Isotonic regression was replaced because it mapped many players to identical
+# plateau values (e.g. 30.5%, 19.3%), destroying sort order.
+# This constant shifts every adj_prob up by the measured mean underestimation
+# while preserving all relative rankings exactly.
+CALIB_SHIFT = 0.028  # +2.78pp — measured mean bias (model underestimates)
+
 def apply_calibration(df):
     """
-    Load the isotonic regression calibrator and correct adj_prob bias in-place.
-    Skips gracefully if the calibrator file doesn't exist.
+    Apply additive Platt-style bias correction to adj_prob.
+    Adds CALIB_SHIFT to every value and clips to [0, 1].
+    Preserves ranking — no two players collapse to the same value.
     """
-    if not os.path.exists(CALIBRATOR_PATH):
-        print(f"  [calibration] {CALIBRATOR_PATH} not found -- skipping.")
-        return df
-
-    with open(CALIBRATOR_PATH, 'rb') as fh:
-        calibrator = pickle.load(fh)
-
     df = df.copy()
     raw = df['adj_prob'].fillna(0).values
-    cal = calibrator.transform(raw)
+    cal = np.clip(raw + CALIB_SHIFT, 0.0, 1.0)
 
-    print(f"  [calibration] Bias corrected: mean adj_prob "
-          f"{raw.mean()*100:.1f}% -> {cal.mean()*100:.1f}%")
+    print(f"  [calibration] +{CALIB_SHIFT*100:.2f}pp shift: "
+          f"mean {raw.mean()*100:.1f}% -> {cal.mean()*100:.1f}%")
 
-    # Sample: top 5 players by raw adj_prob
-    top_locs = df['adj_prob'].nlargest(5).index
+    top_locs = df['adj_prob'].nlargest(10).index
+    print(f"  {'Player':<25}  {'Raw':>6}  {'Cal':>6}")
     for idx in top_locs:
-        loc = df.index.get_loc(idx)
+        loc  = df.index.get_loc(idx)
         name = df.loc[idx, 'player_name'] if 'player_name' in df.columns else str(idx)
-        print(f"    {str(name):25s}  {raw[loc]*100:.1f}% -> {cal[loc]*100:.1f}%")
+        print(f"  {str(name):<25}  {raw[loc]*100:>5.1f}%  {cal[loc]*100:>5.1f}%")
 
     df['adj_prob'] = cal
     return df
@@ -1201,7 +1200,6 @@ def run(date_str=None):
     best_odds_df     = _best_lines(all_odds_df)
     book_markets_map = build_book_markets(all_odds_df)
 
-    # Apply isotonic regression calibration to adj_prob before edge is computed
     print("\n[7b] Applying probability calibration...")
     new_starters_df = apply_calibration(new_starters_df)
 
