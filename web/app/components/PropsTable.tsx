@@ -405,27 +405,27 @@ function DetailCard({ row, myLine }: { row: Row; myLine?: MyLineProps }) {
       {/* ── SECTION 1: MARKET ODDS ── */}
       <div style={CARD}>
         <div style={SEC}>MARKET ODDS</div>
-        <table style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', borderCollapse: 'collapse' }}>
+        <table style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', borderCollapse: 'collapse', width: '100%' }}>
           <thead>
             <tr>
-              <th style={{ textAlign: 'left', color: 'rgba(255,255,255,0.3)', padding: '0 28px 6px 0', fontSize: '9px', letterSpacing: '1.5px', fontWeight: 400 }}>BOOK</th>
-              <th style={{ textAlign: 'right', color: 'rgba(255,255,255,0.3)', padding: '0 0 6px 0', fontSize: '9px', letterSpacing: '1.5px', fontWeight: 400 }}>ODDS</th>
+              <th style={{ textAlign: 'left', color: 'rgba(255,255,255,0.35)', padding: '0 0 8px 0', fontSize: '9px', letterSpacing: '1.5px', fontWeight: 400 }}>BOOK</th>
+              <th style={{ textAlign: 'right', color: 'rgba(255,255,255,0.35)', padding: '0 0 8px 0', fontSize: '9px', letterSpacing: '1.5px', fontWeight: 400 }}>ODDS</th>
             </tr>
           </thead>
           <tbody>
             {MARKET_BOOKS.map(({ key, label }) => {
               const oddsVal = parsedMarkets[key]?.odds ?? null;
-              const color   = oddsVal == null ? 'rgba(255,255,255,0.2)'
-                : oddsVal > 0 ? 'var(--ev-green)' : 'var(--ev-text)';
+              const color   = oddsVal == null ? 'rgba(255,255,255,0.25)'
+                : oddsVal > 0 ? 'var(--ev-green)' : 'rgba(255,255,255,0.9)';
               return (
-                <tr key={key}>
-                  <td style={{ padding: '4px 28px 4px 0', color: 'rgba(255,255,255,0.55)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-                      <BookLogo book={key} size={14} />
+                <tr key={key} style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+                  <td style={{ padding: '7px 0', color: oddsVal != null ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.3)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <BookLogo book={key} size={16} />
                       {label}
                     </div>
                   </td>
-                  <td style={{ textAlign: 'right', color, fontWeight: oddsVal != null ? 600 : 400 }}>
+                  <td style={{ textAlign: 'right', color }}>
                     {oddsVal == null ? '—' : fmtOdds(oddsVal)}
                   </td>
                 </tr>
