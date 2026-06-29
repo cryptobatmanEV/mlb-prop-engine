@@ -290,6 +290,15 @@ function edgeDisplay(edge: number | null, hasLine: boolean) {
                     return { text, color: 'var(--ev-red)',    weight: 400 };
 }
 
+function fmtGameTime(iso: string | null): string {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleTimeString('en-US', {
+      hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/New_York',
+    }) + ' ET';
+  } catch { return iso; }
+}
+
 function getSortVal(row: Row, key: SortKey): string | number | null {
   if (key === 'pitcher_name') return row.pitcher_name;
   return row[key as keyof Row] as string | number | null;
@@ -573,44 +582,13 @@ function DetailCard({ row, myLine }: { row: Row; myLine?: MyLineProps }) {
         </div>
       </div>
 
-      {/* ── SECTION 3: GAME INFO ── */}
-      <div style={CARD}>
-        <div style={{ display: 'flex', gap: '40px', flexWrap: 'wrap' }}>
-          <div>
-            <div style={SEC}>GAME ENVIRONMENT</div>
-            <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-              <div style={{ minWidth: '40px' }}>
-                <div style={LBL}>TEMP</div>
-                <div style={{ ...VAL, color: 'var(--ev-text)' }}>
-                  {row.temp_f == null || isNaN(row.temp_f) ? '—' : `${Math.round(row.temp_f)}°F`}
-                </div>
-              </div>
-              <div style={{ minWidth: '52px' }}>
-                <div style={LBL}>HUMIDITY</div>
-                <div style={{ ...VAL, color: 'var(--ev-text)' }}>
-                  {row.humidity_pct == null || isNaN(row.humidity_pct) ? '—' : `${Math.round(row.humidity_pct)}%`}
-                </div>
-              </div>
-              <div style={{ minWidth: '80px' }}>
-                <div style={LBL}>WIND</div>
-                {(() => { const w = parseWind(row.wind_description); return <div style={{ ...VAL, color: w.color }}>{w.label}</div>; })()}
-              </div>
-            </div>
-          </div>
-          <div>
-            <div style={SEC}>GAME INFO</div>
-            <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-              <div style={{ minWidth: '52px' }}>
-                <div style={LBL}>GAME TIME</div>
-                <div style={{ ...VAL, color: 'var(--ev-text)' }}>{row.game_time ?? '—'}</div>
-              </div>
-              <div style={{ minWidth: '80px' }}>
-                <div style={LBL}>STADIUM</div>
-                <div style={{ ...VAL, color: 'var(--ev-text)' }}>{row.stadium ?? '—'}</div>
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* ── SECTION 3: GAME INFO (plain bar) ── */}
+      <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'rgba(255,255,255,0.3)', letterSpacing: '1px' }}>
+        {row.temp_f != null && !isNaN(row.temp_f) && <span>{Math.round(row.temp_f)}°F</span>}
+        {row.humidity_pct != null && !isNaN(row.humidity_pct) && <span>{Math.round(row.humidity_pct)}% HUM</span>}
+        {row.wind_description && (() => { const w = parseWind(row.wind_description); return <span style={{ color: w.color }}>{w.label}</span>; })()}
+        {row.game_time && <span>{fmtGameTime(row.game_time)}</span>}
+        {row.stadium && <span>{row.stadium}</span>}
       </div>
 
     </div>
@@ -921,7 +899,7 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                         color:       'rgba(255,255,255,0.95)',
                         fontFamily:  'var(--font-syne)',
                         fontWeight:  800,
-                        fontSize:    '15px',
+                        fontSize:    '13px',
                         position:    'sticky',
                         left:        0,
                         zIndex:      1,
@@ -997,7 +975,7 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                       {/* BOOK — logo + odds */}
                       <td style={{ padding: '9px var(--cell-px)', textAlign: 'right' }}>
                         {row.has_line ? (
-                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', justifyContent: 'flex-end' }}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end' }}>
                             <BookLogo book={row.best_book} size={18} />
                             <span style={{ color: 'var(--ev-blue)', fontWeight: 600, fontSize: '13px' }}>
                               {fmtOdds(row.best_odds)}
@@ -1146,16 +1124,6 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
             const trackedOdds = customNum ?? row.best_odds;
             const trackedEdge = customNum != null ? myEdge : row.edge;
 
-            const chipBg = !row.has_line || row.edge == null ? 'transparent'
-              : row.edge > 0.05  ? 'rgba(0,220,110,0.15)'
-              : row.edge > 0     ? 'rgba(0,220,110,0.08)'
-              : row.edge > -0.03 ? 'transparent'
-              : 'rgba(255,77,77,0.1)';
-            const chipBorder = !row.has_line || row.edge == null ? '1px solid rgba(255,255,255,0.1)'
-              : row.edge > 0     ? '1px solid rgba(0,220,110,0.3)'
-              : row.edge > -0.03 ? '1px solid rgba(255,255,255,0.1)'
-              : '1px solid rgba(255,77,77,0.3)';
-
             return (
               <Fragment key={`m-${row.game_id}-${row.batter}`}>
                 <div
@@ -1166,16 +1134,10 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                     borderRadius: '4px', padding: '16px', marginBottom: '6px', cursor: 'pointer',
                   }}
                 >
-                  {/* Name + badges + batting order */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
+                  {/* Name + game time */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                      <span style={{
-                        fontSize: '9px', display: 'inline-block',
-                        color: isExpanded ? 'var(--ev-green)' : 'var(--ev-dim)',
-                        transition: 'transform 0.15s',
-                        transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
-                      }}>▶</span>
-                      <span style={{ fontFamily: 'var(--font-syne)', fontWeight: 800, fontSize: '16px', color: 'rgba(255,255,255,0.95)', letterSpacing: '-0.3px' }}>
+                      <span style={{ fontFamily: 'var(--font-syne)', fontWeight: 800, fontSize: '16px', color: 'rgba(255,255,255,0.95)' }}>
                         {row.player_name}
                       </span>
                       {row.hit_hr === true && (
@@ -1191,35 +1153,33 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                         />
                       )}
                     </div>
-                    {row.bat_order != null && (
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--ev-dim)', flexShrink: 0 }}>
-                        #{row.bat_order}
-                      </span>
-                    )}
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'rgba(255,255,255,0.3)', whiteSpace: 'nowrap' }}>
+                      {fmtGameTime(row.game_time)}
+                    </span>
                   </div>
 
                   {/* Matchup */}
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--ev-muted)', marginBottom: '14px' }}>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '2px', marginBottom: '10px' }}>
                     {row.team_abbr} {row.is_home === 'H' ? 'vs' : '@'} {row.pitcher_name ?? 'TBD'}{row.p_throws ? ` (${row.p_throws})` : ''}
                   </div>
 
-                  {/* Main stats: ADJ% (large) | FAIR | BOOK | EDGE chip */}
-                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: '20px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                  {/* Stats: ADJ% | FAIR | BOOK | EDGE | MY LINE + TRACK */}
+                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: '16px', flexWrap: 'wrap', marginBottom: '10px' }}>
                     <div>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--ev-dim)', marginBottom: '5px' }}>ADJ%</div>
-                      <div style={{ fontFamily: 'var(--font-syne)', fontWeight: 800, fontSize: '20px', color: adjProbColor(row.adj_prob), letterSpacing: '-0.5px' }}>
+                      <div style={{ ...LABEL, marginBottom: '3px' }}>ADJ%</div>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '18px', color: adjProbColor(row.adj_prob), lineHeight: 1 }}>
                         {fmtProb(row.adj_prob)}
                       </div>
                     </div>
                     <div>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--ev-dim)', marginBottom: '5px' }}>FAIR</div>
+                      <div style={{ ...LABEL, marginBottom: '3px' }}>FAIR</div>
                       <div style={{ fontFamily: 'var(--font-mono)', fontSize: '14px', fontWeight: 500, color: 'var(--ev-muted)' }}>
                         {fmtOdds(row.fair_odds)}
                       </div>
                     </div>
                     <div>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--ev-dim)', marginBottom: '5px' }}>BOOK</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                      <div style={{ ...LABEL, marginBottom: '3px' }}>BOOK</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                         {row.has_line && <BookLogo book={row.best_book} size={18} />}
                         <div style={{ fontFamily: 'var(--font-mono)', fontSize: '14px', fontWeight: 600, color: row.has_line ? 'var(--ev-blue)' : 'var(--ev-dim)' }}>
                           {row.has_line ? fmtOdds(row.best_odds) : '—'}
@@ -1227,74 +1187,31 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                       </div>
                     </div>
                     <div>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--ev-dim)', marginBottom: '5px' }}>EDGE</div>
-                      <span style={{
-                        display: 'inline-block', padding: '3px 9px', borderRadius: '10px',
-                        background: chipBg, border: chipBorder,
-                        color: edgeColor, fontFamily: 'var(--font-mono)',
-                        fontSize: '12px', fontWeight: edgeWeight,
-                      }}>
+                      <div style={{ ...LABEL, marginBottom: '3px' }}>EDGE</div>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '15px', color: edgeColor, fontWeight: edgeWeight }}>
                         {edgeText}
-                      </span>
+                      </div>
                     </div>
-                  </div>
-
-                  {/* PARK + WIND chips */}
-                  {(row.hr_park_factor != null || row.wind_description) && (
-                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
-                      {row.hr_park_factor != null && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '3px 9px' }}>
-                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '1.2px', textTransform: 'uppercase', color: 'var(--ev-dim)' }}>PARK</span>
-                          <span style={{
-                            fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: 600,
-                            color: row.hr_park_factor > 105 ? 'var(--ev-green)' : row.hr_park_factor < 95 ? 'var(--ev-red)' : 'var(--ev-muted)',
-                          }}>
-                            {Math.round(row.hr_park_factor)}
-                          </span>
-                        </div>
-                      )}
-                      {row.wind_description && (() => {
-                        const w = parseWind(row.wind_description);
-                        return (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '3px 9px' }}>
-                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '1.2px', textTransform: 'uppercase', color: 'var(--ev-dim)' }}>WIND</span>
-                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 600, color: w.color }}>
-                              {w.label}
-                            </span>
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  )}
-
-                  {/* MY LINE + TRACK */}
-                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: '16px', paddingTop: '12px', borderTop: '1px solid var(--ev-border)' }}>
-                    <div onClick={e => e.stopPropagation()}>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--ev-gold)', marginBottom: '4px' }}>MY LINE</div>
+                    <div onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
                       <input
                         type="text"
                         placeholder="+350"
                         value={rawInput}
                         onChange={e => setCustomOdds(prev => ({ ...prev, [row.batter]: e.target.value }))}
                         style={{
-                          width: '80px', background: 'rgba(255,255,255,0.06)',
-                          border: `1px solid ${customNum != null ? 'rgba(255,200,0,0.5)' : 'rgba(255,255,255,0.15)'}`,
-                          borderRadius: '2px',
-                          color: customNum != null ? 'var(--ev-gold)' : 'rgba(255,255,255,0.4)',
-                          fontFamily: 'var(--font-mono)', fontSize: '13px', fontWeight: 500,
-                          padding: '4px 8px', textAlign: 'right', outline: 'none',
+                          width: '72px', background: 'rgba(255,255,255,0.06)',
+                          border: `1px solid ${customNum != null ? 'rgba(255,200,0,0.5)' : 'rgba(255,255,255,0.1)'}`,
+                          borderRadius: '4px',
+                          color: customNum != null ? 'var(--ev-gold)' : 'rgba(255,255,255,0.3)',
+                          fontFamily: 'var(--font-mono)', fontSize: '11px',
+                          padding: '4px 7px', textAlign: 'right', outline: 'none',
                         }}
                       />
-                    </div>
-                    {customNum != null && (
-                      <div>
-                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--ev-gold)', marginBottom: '4px' }}>MY EDGE</div>
-                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '14px', fontWeight: myEdgeDisp.weight, color: myEdgeDisp.color }}>
+                      {customNum != null && (
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', color: myEdgeDisp.color, fontWeight: myEdgeDisp.weight }}>
                           {myEdgeDisp.text}
-                        </div>
-                      </div>
-                    )}
-                    <div style={{ marginLeft: 'auto' }} onClick={e => e.stopPropagation()}>
+                        </span>
+                      )}
                       <TrackButton
                         gameDate={toISODate(row.game_date)}
                         batter={row.batter}
@@ -1308,11 +1225,39 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                       />
                     </div>
                   </div>
+
+                  {/* PARK + WIND chips */}
+                  {(row.hr_park_factor != null || row.wind_description) && (
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '10px' }}>
+                      {row.hr_park_factor != null && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '4px', padding: '3px 8px' }}>
+                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '1.2px', textTransform: 'uppercase', color: 'var(--ev-dim)' }}>PARK</span>
+                          <span style={{
+                            fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: 600,
+                            color: row.hr_park_factor > 105 ? 'var(--ev-green)' : row.hr_park_factor < 95 ? 'var(--ev-red)' : 'var(--ev-muted)',
+                          }}>
+                            {Math.round(row.hr_park_factor)}
+                          </span>
+                        </div>
+                      )}
+                      {row.wind_description && (() => {
+                        const w = parseWind(row.wind_description);
+                        return (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '4px', padding: '3px 8px' }}>
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '1.2px', textTransform: 'uppercase', color: 'var(--ev-dim)' }}>WIND</span>
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: 600, color: w.color }}>
+                              {w.label}
+                            </span>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+
                 </div>
 
-                {/* Expanded card */}
                 {isExpanded && (
-                  <div style={{ marginBottom: '6px', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', overflow: 'hidden' }}>
+                  <div style={{ margin: '12px -16px -16px' }}>
                     <DetailCard
                       row={row}
                       myLine={{
