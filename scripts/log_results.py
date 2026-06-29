@@ -278,8 +278,10 @@ def grade_ai_picks_log(date_str, pred_df):
                         )
                         updated += cur.rowcount
 
-                    # Pass 2: fallback — grade via hr_predictions.hit_hr for
-                    # any picks still ungraded (e.g. batter missed in boxscore fetch)
+                    # Pass 2: sweep ALL ungraded picks across all dates via
+                    # hr_predictions JOIN — no date filter so every run catches
+                    # picks that were missed on previous days (e.g. fix was not
+                    # yet deployed, boxscore fetch failed, etc.)
                     cur.execute(
                         """
                         UPDATE hr_ai_picks_log al
@@ -289,10 +291,8 @@ def grade_ai_picks_log(date_str, pred_df):
                          WHERE al.game_date = hp.game_date
                            AND al.batter    = hp.batter
                            AND al.result    IS NULL
-                           AND al.game_date = %s
                            AND hp.hit_hr    IS NOT NULL
-                        """,
-                        (date_str,),
+                        """
                     )
                     updated += cur.rowcount
 
