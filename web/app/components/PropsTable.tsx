@@ -354,18 +354,18 @@ function DetailCard({ row, myLine }: { row: Row; myLine?: MyLineProps }) {
   const SEC: React.CSSProperties = {
     fontFamily:    'var(--font-mono)',
     fontSize:      '9px',
-    letterSpacing: '1.5px',
+    letterSpacing: '2px',
     textTransform: 'uppercase',
     color:         'rgba(255,255,255,0.4)',
-    marginBottom:  '8px',
+    marginBottom:  '12px',
   };
   const LBL: React.CSSProperties = {
     fontFamily:    'var(--font-mono)',
     fontSize:      '9px',
     letterSpacing: '1.5px',
     textTransform: 'uppercase',
-    color:         'rgba(255,255,255,0.35)',
-    marginBottom:  '3px',
+    color:         'rgba(255,255,255,0.4)',
+    marginBottom:  '4px',
   };
   const VAL: React.CSSProperties = {
     fontFamily: 'var(--font-mono)',
@@ -375,7 +375,7 @@ function DetailCard({ row, myLine }: { row: Row; myLine?: MyLineProps }) {
   const CARD: React.CSSProperties = {
     background:   '#111416',
     border:       '1px solid rgba(255,255,255,0.06)',
-    borderRadius: '3px',
+    borderRadius: '8px',
     padding:      '10px 12px',
   };
 
@@ -394,12 +394,12 @@ function DetailCard({ row, myLine }: { row: Row; myLine?: MyLineProps }) {
 
   return (
     <div style={{
-      padding:       '8px',
-      background:    '#0a0d0f',
-      borderTop:     '1px solid var(--ev-border)',
+      padding:       '16px',
+      background:    'rgba(255,255,255,0.012)',
+      borderTop:     '1px solid rgba(255,255,255,0.06)',
       display:       'flex',
       flexDirection: 'column',
-      gap:           '6px',
+      gap:           '10px',
     }}>
 
       {/* ── SECTION 1: MARKET ODDS ── */}
@@ -476,84 +476,82 @@ function DetailCard({ row, myLine }: { row: Row; myLine?: MyLineProps }) {
           </div>
         )}
 
-        {/* BATTER L15 */}
-        <div style={{ marginBottom: '16px' }}>
-          <div style={SEC}>BATTER L15</div>
-          <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-            {BATTER_STATS.map(({ key, label }) => {
-              const val = row[key as keyof Row] as number | null;
-              return (
-                <div key={key} style={{ minWidth: '52px' }}>
-                  <div style={LBL}>{label}</div>
-                  <div style={{ ...VAL, color: statColor(key, val) }}>{fmtStat(key, val)}</div>
-                </div>
-              );
-            })}
+        {/* Two-column layout: BATTER L15 | PITCHER ALLOWED + CONTEXT */}
+        <div style={{ display: 'flex', gap: '32px', flexWrap: 'wrap', marginBottom: '16px' }}>
+          {/* Left: BATTER L15 */}
+          <div style={{ flex: '1 1 180px' }}>
+            <div style={SEC}>BATTER L15</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+              {BATTER_STATS.map(({ key, label }) => {
+                const val = row[key as keyof Row] as number | null;
+                return (
+                  <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                    <span style={{ ...LBL, marginBottom: 0 }}>{label}</span>
+                    <span style={{ ...VAL, color: statColor(key, val) }}>{fmtStat(key, val)}</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
-
-        {/* PITCHER ALLOWED L10 */}
-        <div style={{ marginBottom: '16px' }}>
-          <div style={SEC}>PITCHER ALLOWED L10</div>
-          <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-            {PITCHER_STATS.map(({ key, label }) => {
-              const val = row[key as keyof Row] as number | null;
-              return (
-                <div key={key} style={{ minWidth: '52px' }}>
-                  <div style={LBL}>{label}</div>
-                  <div style={{ ...VAL, color: statColor(key, val) }}>{fmtStat(key, val)}</div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* CONTEXT */}
-        <div style={{ marginBottom: '16px' }}>
-          <div style={SEC}>CONTEXT</div>
-          <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-            {CONTEXT_STATS.map(({ key, label }) => {
-              const val = row[key as keyof Row] as number | null;
-              return (
-                <div key={key} style={{ minWidth: '52px' }}>
-                  <div style={LBL}>{label}</div>
-                  <div style={{ ...VAL, color: contextColor(key, val) }}>{fmtContext(key, val)}</div>
-                </div>
-              );
-            })}
+          {/* Right: PITCHER ALLOWED L10 + CONTEXT */}
+          <div style={{ flex: '1 1 180px' }}>
+            <div style={SEC}>PITCHER ALLOWED L10</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '7px', marginBottom: '16px' }}>
+              {PITCHER_STATS.map(({ key, label }) => {
+                const val = row[key as keyof Row] as number | null;
+                return (
+                  <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                    <span style={{ ...LBL, marginBottom: 0 }}>{label}</span>
+                    <span style={{ ...VAL, color: statColor(key, val) }}>{fmtStat(key, val)}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={SEC}>CONTEXT</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+              {CONTEXT_STATS.map(({ key, label }) => {
+                const val = row[key as keyof Row] as number | null;
+                return (
+                  <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                    <span style={{ ...LBL, marginBottom: 0 }}>{label}</span>
+                    <span style={{ ...VAL, color: contextColor(key, val) }}>{fmtContext(key, val)}</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
 
         {/* PLATOON SPLITS + BATTER VS PITCHER */}
-        <div style={{ display: 'flex', gap: '40px', flexWrap: 'wrap', marginBottom: '16px' }}>
-          <div>
+        <div style={{ display: 'flex', gap: '32px', flexWrap: 'wrap', marginBottom: '16px' }}>
+          <div style={{ flex: '1 1 120px' }}>
             <div style={SEC}>PLATOON SPLITS</div>
-            <div style={{ display: 'flex', gap: '20px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
               {PLATOON_STATS.map(({ key, label }) => (
-                <div key={key} style={{ minWidth: '40px' }}>
-                  <div style={LBL}>{label}</div>
-                  <div style={{ ...VAL, color: 'var(--ev-text)' }}>
+                <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <span style={{ ...LBL, marginBottom: 0 }}>{label}</span>
+                  <span style={{ ...VAL, color: 'var(--ev-text)' }}>
                     {fmtPlatoon(row[key as keyof Row] as number | null)}
-                  </div>
+                  </span>
                 </div>
               ))}
             </div>
           </div>
-          <div>
+          <div style={{ flex: '2 1 180px' }}>
             <div style={SEC}>BATTER VS PITCHER</div>
             {row.vs_pitcher_ab != null && row.vs_pitcher_ab > 0 ? (
-              <div style={{ display: 'flex', gap: '20px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
                 {VS_PITCHER_STATS.map(({ key, label }) => (
-                  <div key={key} style={{ minWidth: '36px' }}>
-                    <div style={LBL}>{label}</div>
-                    <div style={{ ...VAL, color: 'var(--ev-text)' }}>
+                  <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                    <span style={{ ...LBL, marginBottom: 0 }}>{label}</span>
+                    <span style={{ ...VAL, color: 'var(--ev-text)' }}>
                       {fmtVsPitcher(key, row[key as keyof Row] as number | null)}
-                    </div>
+                    </span>
                   </div>
                 ))}
               </div>
             ) : (
-              <div style={{ ...VAL, color: 'rgba(255,255,255,0.25)', fontSize: '11px' }}>NO HISTORY</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'rgba(255,255,255,0.25)' }}>NO HISTORY</div>
             )}
           </div>
         </div>
@@ -561,13 +559,13 @@ function DetailCard({ row, myLine }: { row: Row; myLine?: MyLineProps }) {
         {/* PITCHER PROFILE */}
         <div>
           <div style={SEC}>PITCHER PROFILE</div>
-          <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
             {PITCHER_PROFILE_STATS.map(({ key, label }) => {
               const val = row[key as keyof Row] as number | null;
               return (
-                <div key={key} style={{ minWidth: '52px' }}>
-                  <div style={LBL}>{label}</div>
-                  <div style={{ ...VAL, color: 'var(--ev-text)' }}>{fmtPitcherProfile(key, val)}</div>
+                <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <span style={{ ...LBL, marginBottom: 0 }}>{label}</span>
+                  <span style={{ ...VAL, color: 'var(--ev-text)' }}>{fmtPitcherProfile(key, val)}</span>
                 </div>
               );
             })}
@@ -631,7 +629,7 @@ const LABEL: React.CSSProperties = {
 
 const TH_BASE: React.CSSProperties = {
   ...LABEL,
-  padding:    '10px var(--cell-px)',
+  padding:    '9px var(--cell-px)',
   fontWeight:  500,
   background: 'rgba(255,255,255,0.02)',
   userSelect: 'none',
@@ -911,17 +909,25 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                       className="pred-row"
                       onClick={() => toggleExpand(row.batter)}
                       style={{
-                        borderBottom: isExpanded ? 'none' : '1px solid var(--ev-border)',
-                        cursor: 'pointer',
-                        background: isExpanded ? 'rgba(255,255,255,0.03)' : undefined,
+                        height:       '52px',
+                        borderBottom: isExpanded ? 'none' : '1px solid rgba(255,255,255,0.06)',
+                        cursor:       'pointer',
+                        background:   isExpanded ? 'rgba(255,255,255,0.03)' : undefined,
                       }}
                     >
                       {/* PLAYER — sticky */}
                       <td style={{
-                        padding: '14px var(--cell-px)', color: 'var(--ev-text)', fontWeight: 500,
-                        position: 'sticky', left: 0, zIndex: 1,
-                        background: isExpanded ? 'rgba(20,24,28,1)' : STICKY_BG,
-                        borderRight: '1px solid var(--ev-border)', whiteSpace: 'nowrap',
+                        padding:     '9px var(--cell-px)',
+                        color:       'rgba(255,255,255,0.95)',
+                        fontFamily:  'var(--font-syne)',
+                        fontWeight:  800,
+                        fontSize:    '15px',
+                        position:    'sticky',
+                        left:        0,
+                        zIndex:      1,
+                        background:  isExpanded ? 'rgba(20,24,28,1)' : STICKY_BG,
+                        borderRight: '1px solid rgba(255,255,255,0.06)',
+                        whiteSpace:  'nowrap',
                       }}>
                         <span style={{
                           display: 'inline-block', marginRight: '6px', fontSize: '9px',
@@ -950,20 +956,20 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                       </td>
 
                       {/* BO */}
-                      <td style={{ padding: '14px var(--cell-px)', textAlign: 'right', color: 'var(--ev-dim)', fontSize: '11px' }}>
+                      <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', color: 'var(--ev-dim)', fontSize: '11px' }}>
                         {row.bat_order ?? '—'}
                       </td>
 
                       {/* H/A */}
                       <td style={{
-                        padding: '14px var(--cell-px)', textAlign: 'right', fontSize: '11px',
+                        padding: '9px var(--cell-px)', textAlign: 'right', fontSize: '11px',
                         color: row.is_home === 'H' ? 'var(--ev-green)' : 'var(--ev-muted)',
                       }}>
                         {row.is_home ?? '—'}
                       </td>
 
                       {/* TEAM */}
-                      <td style={{ padding: '14px var(--cell-px)', color: 'var(--ev-muted)' }}>
+                      <td style={{ padding: '9px var(--cell-px)', color: 'var(--ev-muted)' }}>
                         {row.team_abbr}
                         {row.stand && (
                           <span style={{ color: 'var(--ev-dim)', marginLeft: '5px', fontSize: '10px' }}>{row.stand}</span>
@@ -971,7 +977,7 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                       </td>
 
                       {/* VS */}
-                      <td style={{ padding: '14px var(--cell-px)', color: 'var(--ev-dim)', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                      <td style={{ padding: '9px var(--cell-px)', color: 'var(--ev-dim)', fontSize: '11px', whiteSpace: 'nowrap' }}>
                         {row.pitcher_name ?? 'TBD'}
                         {row.p_throws && (
                           <span style={{ color: 'rgba(255,255,255,0.2)', marginLeft: '3px' }}>({row.p_throws})</span>
@@ -979,17 +985,17 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                       </td>
 
                       {/* ADJ% — color coded, larger */}
-                      <td style={{ padding: '14px var(--cell-px)', textAlign: 'right', fontWeight: 700, fontSize: '13px', color: adjProbColor(row.adj_prob) }}>
+                      <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', fontWeight: 700, fontSize: '13px', color: adjProbColor(row.adj_prob) }}>
                         {fmtProb(row.adj_prob)}
                       </td>
 
                       {/* FAIR ODDS */}
-                      <td style={{ padding: '14px var(--cell-px)', textAlign: 'right', color: 'var(--ev-dim)', fontSize: '11px' }}>
+                      <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', color: 'var(--ev-dim)', fontSize: '11px' }}>
                         {fmtOdds(row.fair_odds)}
                       </td>
 
                       {/* BOOK — logo + odds */}
-                      <td style={{ padding: '14px var(--cell-px)', textAlign: 'right' }}>
+                      <td style={{ padding: '9px var(--cell-px)', textAlign: 'right' }}>
                         {row.has_line ? (
                           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', justifyContent: 'flex-end' }}>
                             <BookLogo book={row.best_book} size={18} />
@@ -1003,13 +1009,13 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                       </td>
 
                       {/* EDGE */}
-                      <td style={{ padding: '14px var(--cell-px)', textAlign: 'right', color: edgeColor, fontWeight: edgeWeight }}>
+                      <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', color: edgeColor, fontWeight: edgeWeight }}>
                         {edgeText}
                       </td>
 
                       {/* PARK */}
                       <td style={{
-                        padding: '14px var(--cell-px)', textAlign: 'right', fontSize: '11px', fontWeight: 500,
+                        padding: '9px var(--cell-px)', textAlign: 'right', fontSize: '11px', fontWeight: 500,
                         color: row.hr_park_factor == null ? 'var(--ev-dim)'
                           : row.hr_park_factor > 105 ? 'var(--ev-green)'
                           : row.hr_park_factor < 95  ? 'var(--ev-red)'
@@ -1019,7 +1025,7 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                       </td>
 
                       {/* WIND */}
-                      <td style={{ padding: '14px var(--cell-px)', fontSize: '13px', fontWeight: 600, fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
+                      <td style={{ padding: '9px var(--cell-px)', fontSize: '13px', fontWeight: 600, fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
                         {(() => { const w = parseWind(row.wind_description); return <span style={{ color: w.color }}>{w.label}</span>; })()}
                       </td>
 
@@ -1065,7 +1071,7 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                     </tr>
 
                     {isExpanded && (
-                      <tr style={{ borderBottom: '1px solid var(--ev-border)' }}>
+                      <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                         <td colSpan={COLS.length} style={{ padding: 0 }}>
                           <DetailCard
                             row={row}
@@ -1156,8 +1162,8 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                   className="mobile-pred-card"
                   onClick={() => toggleExpand(row.batter)}
                   style={{
-                    background: '#111416', border: '1px solid var(--ev-border)',
-                    borderRadius: '3px', padding: '14px 16px', marginBottom: '8px', cursor: 'pointer',
+                    background: '#111416', border: '1px solid rgba(255,255,255,0.06)',
+                    borderRadius: '4px', padding: '16px', marginBottom: '6px', cursor: 'pointer',
                   }}
                 >
                   {/* Name + badges + batting order */}
@@ -1169,7 +1175,7 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                         transition: 'transform 0.15s',
                         transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
                       }}>▶</span>
-                      <span style={{ fontFamily: 'var(--font-syne)', fontWeight: 800, fontSize: '15px', color: 'var(--ev-text)', letterSpacing: '-0.3px' }}>
+                      <span style={{ fontFamily: 'var(--font-syne)', fontWeight: 800, fontSize: '16px', color: 'rgba(255,255,255,0.95)', letterSpacing: '-0.3px' }}>
                         {row.player_name}
                       </span>
                       {row.hit_hr === true && (
@@ -1306,7 +1312,7 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
 
                 {/* Expanded card */}
                 {isExpanded && (
-                  <div style={{ marginBottom: '8px', border: '1px solid var(--ev-border)', borderRadius: '3px', overflow: 'hidden' }}>
+                  <div style={{ marginBottom: '6px', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', overflow: 'hidden' }}>
                     <DetailCard
                       row={row}
                       myLine={{
