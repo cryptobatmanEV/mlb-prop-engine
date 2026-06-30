@@ -142,15 +142,15 @@ export default function TrackButton({
           }}
           autoFocus
           style={{
-            width:        '52px',
-            background:   'rgba(255,255,255,0.06)',
-            border:       '1px solid rgba(255,255,255,0.15)',
+            width:        '64px',
+            background:   'rgba(255,255,255,0.08)',
+            border:       '1px solid rgba(255,255,255,0.25)',
             borderRadius: '2px',
             color:        'var(--ev-text)',
             fontFamily:   'var(--font-mono)',
-            fontSize:     '12px',
+            fontSize:     '13px',
             fontWeight:   500,
-            padding:      '3px 6px',
+            padding:      '5px 8px',
             textAlign:    'right',
             outline:      'none',
           }}

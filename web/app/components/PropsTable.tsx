@@ -1192,7 +1192,7 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                         {edgeText}
                       </div>
                     </div>
-                    <div onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
+                    <div onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', justifyContent: 'flex-end' }}>
                       <input
                         type="text"
                         placeholder="+350"
