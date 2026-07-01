@@ -146,6 +146,10 @@ export default function AiPicks({ rows, trackedSet, authHeaders }: { rows: Row[]
       .slice(0, MAX_PICKS);
   }, [rows]);
 
+  const wins    = picks.filter(p => p.row.hit_hr === true).length;
+  const losses  = picks.filter(p => p.row.hit_hr === false).length;
+  const settled = wins + losses;
+
   if (picks.length === 0) {
     return (
       <div style={{ ...CARD, padding: '48px', textAlign: 'center' }}>
@@ -160,8 +164,22 @@ export default function AiPicks({ rows, trackedSet, authHeaders }: { rows: Row[]
 
   return (
     <div>
-      <div style={{ ...LABEL, marginBottom: '10px', letterSpacing: '2px' }}>
-        TOP {picks.length} HR PLAY{picks.length !== 1 ? 'S' : ''} &mdash; RANKED BY LIKELIHOOD TO HOMER
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+        <div style={{ ...LABEL, letterSpacing: '2px' }}>
+          TOP {picks.length} HR PLAY{picks.length !== 1 ? 'S' : ''} &mdash; RANKED BY LIKELIHOOD TO HOMER
+        </div>
+        {settled > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '2px', fontFamily: 'var(--font-mono)', fontSize: '13px', fontWeight: 700 }}>
+            <span style={{ color: 'var(--ev-green)' }}>{wins}W</span>
+            <span style={{ color: 'rgba(255,255,255,0.2)', margin: '0 2px' }}>-</span>
+            <span style={{ color: 'var(--ev-red)' }}>{losses}L</span>
+            {picks.length > settled && (
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--ev-dim)', fontWeight: 400, marginLeft: '6px', letterSpacing: '1px' }}>
+                {picks.length - settled} PENDING
+              </span>
+            )}
+          </div>
+        )}
       </div>
       <div className="ai-picks-grid" style={{
         display:             'grid',
@@ -197,12 +215,32 @@ export default function AiPicks({ rows, trackedSet, authHeaders }: { rows: Row[]
                     </div>
                   )}
                 </div>
-                <div style={{
-                  fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '2px',
-                  color: 'var(--ev-green)', border: '1px solid rgba(0,220,110,0.3)',
-                  borderRadius: '2px', padding: '3px 6px', whiteSpace: 'nowrap',
-                }}>
-                  #{idx + 1} PICK
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '5px' }}>
+                  <div style={{
+                    fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '2px',
+                    color: 'var(--ev-green)', border: '1px solid rgba(0,220,110,0.3)',
+                    borderRadius: '2px', padding: '3px 6px', whiteSpace: 'nowrap',
+                  }}>
+                    #{idx + 1} PICK
+                  </div>
+                  {row.hit_hr === true && (
+                    <div style={{
+                      fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: 700,
+                      color: '#0a0d0f', background: 'var(--ev-green)',
+                      borderRadius: '2px', padding: '2px 8px', letterSpacing: '1px',
+                    }}>
+                      W
+                    </div>
+                  )}
+                  {row.hit_hr === false && (
+                    <div style={{
+                      fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: 700,
+                      color: '#fff', background: 'var(--ev-red)',
+                      borderRadius: '2px', padding: '2px 8px', letterSpacing: '1px',
+                    }}>
+                      L
+                    </div>
+                  )}
                 </div>
               </div>
 
