@@ -593,15 +593,20 @@ def fetch_props_parlay_api(date_str):
 
         mkt = row.get('market_key', '')
 
-        # --- HR props (anytime: 0.5 line only) ---
-        if mkt == 'player_home_runs':
+        # --- HR props (anytime HR) ---
+        # player_home_runs      → standard format (Novig, bet365, FD)  line=0.5
+        # player_home_runs_alt  → DK/BetMGM "1 or more" format        line=1.0
+        # Both represent the same anytime-HR market; skip 2+ lines.
+        if mkt in ('player_home_runs', 'player_home_runs_alt'):
             if row.get('is_dfs_flat_payout'):
                 continue
             over_price = row.get('over_price')
             if over_price is None:
                 continue
             line = row.get('line')
-            if line is None or float(line) != 0.5:
+            if line is None:
+                continue
+            if float(line) not in (0.5, 1.0):
                 continue
             player = row.get('player', '')
             if not player:
