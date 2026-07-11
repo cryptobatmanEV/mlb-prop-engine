@@ -39,6 +39,7 @@ function scorePick(row: Row): Pick | null {
   if (!row.has_line || row.edge == null || row.edge <= MIN_EDGE) return null;
   if (row.adj_prob == null || row.adj_prob <= MIN_ADJ_PROB) return null;
   if (row.best_odds == null || row.best_odds > 500) return null;
+  if (row.barrel_pct_15 === 0) return null;  // zero barrels in 15 games = not an HR threat
 
   // Primary signal: who is most likely to homer tonight.
   const probScore = row.adj_prob * 5;
@@ -50,12 +51,12 @@ function scorePick(row: Row): Pick | null {
   const hardHitBonus  = (hardhit - 0.35) * 1;
 
   const bo           = row.bat_order;
-  const lineupBonus  = bo != null && bo <= 3 ? 0.15 : bo != null && bo <= 5 ? 0.08 : bo != null && bo <= 7 ? 0.02 : 0;
+  const lineupBonus  = bo != null && bo <= 3 ? 0.25 : bo != null && bo <= 5 ? 0.10 : bo != null && bo <= 7 ? 0.02 : 0;
 
-  // Secondary signal: edge is a tiebreaker, not the driver.
-  const edgeBonus = row.edge * 0.5;
+  // Secondary signal: market consensus is a stronger predictor than our own edge claim.
+  const bookBonus = (row.book_implied ?? 0) * 2;
 
-  const score = probScore + barrelBonus + hardHitBonus + lineupBonus + edgeBonus;
+  const score = probScore + barrelBonus + hardHitBonus + lineupBonus + bookBonus;
 
   // Build a one-line "why", always leading with the HR probability itself.
   const supporting: { label: string; value: number }[] = [
@@ -65,7 +66,7 @@ function scorePick(row: Row): Pick | null {
       label: bo != null && bo <= 3 ? 'top of the order' : bo != null && bo <= 5 ? 'middle of the lineup' : 'lower lineup',
       value: lineupBonus > 0 ? lineupBonus : 0,
     },
-    { label: 'positive market edge',    value: row.edge > 0.02 ? edgeBonus : 0 },
+    { label: 'market pricing aligned',  value: (row.book_implied ?? 0) >= 0.15 ? bookBonus : 0 },
   ];
 
   const top = supporting

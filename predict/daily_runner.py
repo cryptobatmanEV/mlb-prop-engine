@@ -53,11 +53,12 @@ OUT_DIR      = 'data/predictions'
 FEATURES = [
     'barrel_pct_15','hardhit_pct_15','flyball_pct_15','hr_per_bb_15','avg_ev_15','xwoba_15','xslg_15',
     'barrel_pct_30','hardhit_pct_30','flyball_pct_30','hr_per_bb_30','avg_ev_30','xwoba_30','xslg_30',
-    'p_barrel_pct_allowed_10','p_hardhit_pct_allowed_10','p_flyball_pct_allowed_10',
+    # p_barrel_pct_allowed_10 and p_hardhit_pct_allowed_10 removed: r≈+0.004/+0.003, zero signal
+    'p_flyball_pct_allowed_10',
     'p_hr_per_bb_allowed_10','p_avg_ev_allowed_10','p_xslg_allowed_10',
     'p_barrel_pct_allowed_20','p_hardhit_pct_allowed_20','p_flyball_pct_allowed_20',
     'p_hr_per_bb_allowed_20','p_avg_ev_allowed_20','p_xslg_allowed_20',
-    'hr_park_factor',
+    # hr_park_factor removed: r≈+0.014, near-zero signal
     'temp_f', 'wind_speed', 'wind_favor', 'is_dome',
     'stand_R', 'p_throws_R',
     'hr_per_bb_vs_R_15', 'barrel_pct_vs_R_15', 'hardhit_pct_vs_R_15',

@@ -86,6 +86,7 @@ export type Row = {
   game_time: string | null;
   stadium: string | null;
   book_markets: string | null;
+  book_implied: number | null;
 };
 
 type MyLineProps = {

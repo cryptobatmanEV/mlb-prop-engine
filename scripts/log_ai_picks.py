@@ -105,12 +105,16 @@ def score_row(row) -> float | None:
     if best_odds is None or best_odds > MAX_ODDS:
         return None
 
-    barrel  = _f(row.get('barrel_pct_15'))  or 0.0
+    barrel_raw = _f(row.get('barrel_pct_15'))
+    if barrel_raw is not None and barrel_raw == 0.0:
+        return None  # zero barrels in 15 games = not an HR threat
+    barrel  = barrel_raw or 0.0
     hardhit = _f(row.get('hardhit_pct_15')) or 0.0
     bo      = _i(row.get('bat_order'))
+    book_implied = _f(row.get('book_implied')) or 0.0
 
-    lineup_bonus = (0.15 if bo is not None and bo <= 3 else
-                    0.08 if bo is not None and bo <= 5 else
+    lineup_bonus = (0.25 if bo is not None and bo <= 3 else
+                    0.10 if bo is not None and bo <= 5 else
                     0.02 if bo is not None and bo <= 7 else 0.0)
 
     return (
@@ -118,7 +122,7 @@ def score_row(row) -> float | None:
         + (barrel  - 0.08) * 2
         + (hardhit - 0.35) * 1
         + lineup_bonus
-        + edge * 0.5
+        + book_implied * 2
     )
 
 

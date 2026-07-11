@@ -739,7 +739,7 @@ def join_odds_and_edge(starters_df, best_odds_df):
 # plateau values (e.g. 30.5%, 19.3%), destroying sort order.
 # This constant shifts every adj_prob up by the measured mean underestimation
 # while preserving all relative rankings exactly.
-CALIB_SHIFT = 0.028  # +2.78pp — measured mean bias (model underestimates)
+CALIB_SHIFT = 0.028  # +2.80pp — calibrated against post-Jun-28 additive era (adj=13.06% vs actual HR=13.02%)
 
 def apply_calibration(df):
     """
