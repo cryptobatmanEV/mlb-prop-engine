@@ -8,13 +8,16 @@ pybaseball.cache.enable()
 
 STORE_PATH = 'data/raw/statcast_batted_balls.parquet'
 
+# NOTE: this store holds one row per completed plate appearance (events.notna()),
+# not just batted balls -- see fetch_statcast.py for details.
 KEEP_COLS = [
-    'game_date', 'game_year', 'game_pk',
+    'game_date', 'game_year', 'game_pk', 'at_bat_number',
     'batter', 'pitcher', 'player_name',
     'events', 'description', 'bb_type',
     'launch_speed', 'launch_angle', 'hit_distance_sc',
-    'stand', 'p_throws', 'bat_order',
+    'stand', 'p_throws',
     'home_team', 'away_team', 'inning_topbot',
+    'estimated_ba_using_speedangle',
     'estimated_woba_using_speedangle', 'estimated_slg_using_speedangle',
     'woba_value', 'babip_value', 'iso_value',
 ]
@@ -52,14 +55,14 @@ def update():
 
     cols = [c for c in KEEP_COLS if c in df.columns]
     df = df[cols]
-    df = df[df['launch_speed'].notna()]
-    print(f"  New batted balls: {len(df)}")
+    df = df[df['events'].notna()]
+    print(f"  New plate appearances: {len(df)}")
 
     existing = pd.read_parquet(STORE_PATH)
     combined = pd.concat([existing, df], ignore_index=True)
     before = len(combined)
     combined = combined.drop_duplicates(
-        subset=['game_pk', 'batter', 'game_date', 'launch_speed', 'launch_angle'],
+        subset=['game_pk', 'batter', 'at_bat_number'],
         keep='last'
     )
     after = len(combined)

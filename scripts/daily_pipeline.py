@@ -6,14 +6,22 @@ Usage:
     python scripts/daily_pipeline.py 2026-06-07   # specific date
 
 Steps (run in order):
-    1. update_statcast  -- pull new Statcast batted-ball data through yesterday
-    2. daily_runner     -- score today's batters, output predictions CSV
-    3. fair_odds        -- filter to confirmed starters, join market lines, compute edge
-    4. write_to_db      -- upsert today's fair_odds into Neon PostgreSQL (powers web app)
+    1. update_statcast  -- pull new Statcast PA-outcome data through yesterday
+                           (all 4 models share this store; HR features filter
+                           to batted balls, Hits/TB/Ks use the full PA outcomes)
+    2. daily_runner     -- score today's batters (HR), output predictions CSV
+    3. fair_odds        -- filter to confirmed starters, join market lines, compute edge (HR)
+    4. write_to_db      -- upsert today's fair_odds into Neon PostgreSQL (HR)
+    5. log_ai_picks     -- log qualifying HR plays to hr_ai_picks_log
+    6. batter_props_fair_odds -- Hits/Total Bases/Batter Ks: predict, join
+                           ParlayAPI odds, write to their own DB tables, log
+                           AI picks. Independent of steps 2-5 (HR is untouched).
 
 Output files:
-    data/predictions/predictions_{date}.csv   -- raw model scores for all roster players
-    data/outputs/fair_odds_{date}.csv         -- confirmed starters only, with edge column
+    data/predictions/predictions_{date}.csv        -- HR: raw model scores for all roster players
+    data/outputs/fair_odds_{date}.csv              -- HR: confirmed starters only, with edge column
+    data/predictions/{hits,total_bases,batter_ks}_predictions_{date}.csv
+    data/outputs/{hits,total_bases,batter_ks}_fair_odds_{date}.csv
 
 Run log_results.py the next morning to record actual HR outcomes.
 """
@@ -70,7 +78,13 @@ def run(date_str=None):
 
     # Step 5: log AI PICKS snapshot (non-fatal)
     from scripts.log_ai_picks import run as ai_picks_run
-    _run_step(f"Step 5/5  Log AI picks ({date_str})", ai_picks_run, date_str)
+    _run_step(f"Step 5/6  Log AI picks ({date_str})", ai_picks_run, date_str)
+
+    # Step 6: Hits / Total Bases / Batter Ks -- predictions, odds, DB write,
+    # AI picks all happen inside batter_props_fair_odds.run() (non-fatal --
+    # the HR pipeline above already succeeded regardless of this step).
+    from predict.batter_props_fair_odds import run as batter_props_run
+    _run_step(f"Step 6/6  Hits/Total Bases/Batter Ks ({date_str})", batter_props_run, date_str)
 
     print(f"\n{'#'*60}")
     print(f"#  Done  --  {date_str}")

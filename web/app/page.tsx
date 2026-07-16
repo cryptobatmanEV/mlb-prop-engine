@@ -1,9 +1,26 @@
 import { getDb } from '@/lib/db';
 import PropsTable, { Row } from './components/PropsTable';
+import BatterPropsTable, { PropRow, PropConfig } from './components/BatterPropsTable';
 import DateNav from './components/DateNav';
 import Nav from './components/Nav';
+import PropTypeTabs, { StatType } from './components/PropTypeTabs';
 
 export const dynamic = 'force-dynamic';
+
+const STAT_CONFIG: Record<Exclude<StatType, 'hr'>, { table: string; config: PropConfig }> = {
+  hits: {
+    table: 'hits_predictions',
+    config: { label: 'Hits', prob1Label: 'P(1+ H)', prob2Label: 'P(2+ H)', projLabel: 'PROJ HITS' },
+  },
+  total_bases: {
+    table: 'total_bases_predictions',
+    config: { label: 'Total Bases', prob1Label: 'P(1+ TB)', prob2Label: 'P(2+ TB)', projLabel: 'PROJ TB' },
+  },
+  batter_ks: {
+    table: 'batter_ks_predictions',
+    config: { label: 'Strikeouts', prob1Label: 'P(0.5+ K)', prob2Label: 'P(1.5+ K)', projLabel: 'PROJ K' },
+  },
+};
 
 // ── Style tokens ───────────────────────────────────────────────────────────
 
@@ -26,9 +43,11 @@ const CARD: React.CSSProperties = {
 export default async function Home({
   searchParams,
 }: {
-  searchParams: Promise<{ date?: string }>;
+  searchParams: Promise<{ date?: string; stat?: string }>;
 }) {
   const params = await searchParams;
+  const stat: StatType = (['hits', 'total_bases', 'batter_ks'].includes(params.stat ?? '')
+    ? params.stat : 'hr') as StatType;
 
   // Date context (ET)
   const now      = new Date();
@@ -49,26 +68,67 @@ export default async function Home({
   const isBeforeLineups = isViewingToday && parseInt(etHourStr, 10) < 15;
 
   let rows:        Row[]         = [];
+  let propRows:    PropRow[]     = [];
   let dbError:     string | null = null;
   let lastUpdated: string | null = null;
 
+  const isHrTab = stat === 'hr';
+
   try {
     const sql = getDb();
-    rows = (await sql`
-      SELECT * FROM hr_predictions
-      WHERE game_date = ${validDate}::date
-      ORDER BY adj_prob DESC
-    `) as Row[];
 
-    const lu = await sql`
-      SELECT MAX(created_at) AS ts
-      FROM hr_predictions
-      WHERE game_date = ${validDate}::date
-    `;
-    if (lu[0]?.ts) {
-      lastUpdated = new Date(lu[0].ts as string).toLocaleTimeString('en-US', {
-        hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/New_York',
-      });
+    if (isHrTab) {
+      rows = (await sql`
+        SELECT * FROM hr_predictions
+        WHERE game_date = ${validDate}::date
+        ORDER BY adj_prob DESC
+      `) as Row[];
+
+      const lu = await sql`
+        SELECT MAX(created_at) AS ts FROM hr_predictions WHERE game_date = ${validDate}::date
+      `;
+      if (lu[0]?.ts) {
+        lastUpdated = new Date(lu[0].ts as string).toLocaleTimeString('en-US', {
+          hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/New_York',
+        });
+      }
+    } else {
+      // table/statPrefix come only from the fixed STAT_CONFIG whitelist above
+      // (never from raw user input), so safe to interpolate directly --
+      // the Neon serverless driver's tagged template doesn't support dynamic
+      // identifiers the way postgres.js's sql(name) does, so sql.query() with
+      // the identifier baked into the text (and only the date parameterized)
+      // is the correct escape hatch here.
+      const { table } = STAT_CONFIG[stat];
+      const statPrefix = table.replace('_predictions', '');
+
+      const propResult = await sql(
+        `SELECT
+           id, game_date, game_pk, batter, player_name, team_abbr, opp_team,
+           bat_order, is_home, game_time, stadium, pitcher_name, p_throws,
+           adj_prob, primary_line, primary_has_line, primary_best_book, primary_best_odds, primary_edge,
+           secondary_line, secondary_has_line, secondary_best_book, secondary_best_odds, secondary_edge,
+           book_markets,
+           pred_${statPrefix} AS pred_stat,
+           p_${statPrefix}_1plus AS p_stat_1plus,
+           p_${statPrefix}_2plus AS p_stat_2plus
+         FROM ${table}
+         WHERE game_date = $1::date
+         ORDER BY adj_prob DESC`,
+        [validDate],
+      );
+      propRows = propResult as unknown as PropRow[];
+
+      const lu = await sql(
+        `SELECT MAX(created_at) AS ts FROM ${table} WHERE game_date = $1::date`,
+        [validDate],
+      );
+      const luRow = (lu as unknown as { ts: string | null }[])[0];
+      if (luRow?.ts) {
+        lastUpdated = new Date(luRow.ts).toLocaleTimeString('en-US', {
+          hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/New_York',
+        });
+      }
     }
   } catch (err) {
     dbError = err instanceof Error ? err.message : String(err);
@@ -76,8 +136,11 @@ export default async function Home({
     console.error('[page] DB error:', dbError);
   }
 
-  const withLine = rows.filter(r => r.has_line).length;
-  const posEdge  = rows.filter(r => r.edge != null && r.edge > 0).length;
+  const withLine = isHrTab ? rows.filter(r => r.has_line).length : propRows.filter(r => r.primary_has_line).length;
+  const posEdge  = isHrTab
+    ? rows.filter(r => r.edge != null && r.edge > 0).length
+    : propRows.filter(r => r.primary_edge != null && r.primary_edge > 0).length;
+  const rowCount = isHrTab ? rows.length : propRows.length;
 
   // ── Render ───────────────────────────────────────────────────────────────
 
@@ -94,7 +157,7 @@ export default async function Home({
             fontFamily: 'var(--font-syne)', fontWeight: 800, fontSize: '26px',
             margin: 0, letterSpacing: '-0.5px', color: 'var(--ev-text)',
           }}>
-            MLB HR PROPS
+            BATTER MODEL
           </h1>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '16px', marginTop: '6px', flexWrap: 'wrap' }}>
             <div style={{ ...LABEL, color: 'var(--ev-muted)', letterSpacing: '1px' }}>
@@ -106,9 +169,9 @@ export default async function Home({
               </div>
             )}
           </div>
-          {rows.length > 0 && (
+          {rowCount > 0 && (
             <div style={{ ...LABEL, color: 'var(--ev-dim)', marginTop: '4px', letterSpacing: '1px' }}>
-              {rows.length} STARTERS &middot; {withLine} W/ LINES &middot; {posEdge} +EV
+              {rowCount} STARTERS &middot; {withLine} W/ LINES &middot; {posEdge} +EV
             </div>
           )}
         </header>
@@ -116,11 +179,14 @@ export default async function Home({
         {/* Nav */}
         <Nav active="card" />
 
+        {/* Prop type tabs */}
+        <PropTypeTabs active={stat} />
+
         {/* Date navigation */}
         <DateNav date={validDate} today={todayISO} />
 
         {/* Predictions table */}
-        {dbError || rows.length === 0 ? (
+        {dbError || rowCount === 0 ? (
           <div style={{ ...CARD, padding: '48px', textAlign: 'center' }}>
             <div style={{ ...LABEL, color: 'var(--ev-muted)' }}>
               {dbError
@@ -130,8 +196,10 @@ export default async function Home({
                   : 'No plays available for this date'}
             </div>
           </div>
-        ) : (
+        ) : isHrTab ? (
           <PropsTable rows={rows} />
+        ) : (
+          <BatterPropsTable rows={propRows} config={STAT_CONFIG[stat].config} />
         )}
 
         {/* Legend */}
@@ -139,13 +207,13 @@ export default async function Home({
           <span style={{ ...LABEL, color: 'var(--ev-green)' }}>+EV GREEN</span>
           <span style={LABEL}>&gt;5% BOLD</span>
           <span style={{ ...LABEL, color: 'var(--ev-red)' }}>&lt;-3% RED</span>
-          <span style={LABEL}>^ TAIL  v INTO  ~ NEUTRAL</span>
-          <span style={{ ...LABEL, color: 'var(--ev-gold)' }}>MY LINE = CUSTOM ODDS</span>
+          {isHrTab && <span style={LABEL}>^ TAIL  v INTO  ~ NEUTRAL</span>}
+          {isHrTab && <span style={{ ...LABEL, color: 'var(--ev-gold)' }}>MY LINE = CUSTOM ODDS</span>}
         </div>
 
         {/* Footer */}
         <div style={{ ...LABEL, textAlign: 'center', marginTop: '40px', fontSize: '9px', color: 'rgba(255,255,255,0.15)' }}>
-          ADJ% = HR PROBABILITY &nbsp;&middot;&nbsp;
+          ADJ% = {isHrTab ? 'HR' : STAT_CONFIG[stat as Exclude<StatType,'hr'>].config.label.toUpperCase()} PROBABILITY &nbsp;&middot;&nbsp;
           EDGE = MODEL VS BOOK PRICE &nbsp;&middot;&nbsp;
           P/L SETTLES AFTER GAMES ARE FINAL
         </div>

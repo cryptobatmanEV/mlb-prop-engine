@@ -19,7 +19,7 @@ const syne = Syne({
 
 export const metadata: Metadata = {
   title: 'The +EV Cave',
-  description: 'MLB HR prop model — edge-first',
+  description: 'MLB Batter Model — HR, Hits, Total Bases & Strikeouts props, edge-first',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
