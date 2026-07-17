@@ -3,6 +3,16 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
+export type StatType = 'home_runs' | 'hits' | 'total_bases' | 'batter_ks';
+
+// Composite key for the tracked-bets lookup set -- must match how
+// api/tracked's rows are keyed below (date-batter-statType-line), since the
+// unique constraint on tracked_bets is now (game_date, batter, stat_type, line)
+// instead of just (game_date, batter).
+export function trackedKey(gameDate: string, batter: number, statType: StatType = 'home_runs', line = 0.5): string {
+  return `${gameDate}-${batter}-${statType}-${line}`;
+}
+
 type Props = {
   gameDate:    string;
   batter:      number;
@@ -11,6 +21,8 @@ type Props = {
   adjProb:     number;
   trackedOdds: number | null;
   trackedEdge: number | null;
+  statType?:   StatType;  // defaults to 'home_runs' for the existing HR tab
+  line?:       number;    // defaults to 0.5 (anytime HR is itself a 0.5-line market)
   isTracked?:  boolean;
   authHeaders?: HeadersInit;
 };
@@ -29,7 +41,8 @@ const BTN: React.CSSProperties = {
 };
 
 export default function TrackButton({
-  gameDate, batter, playerName, teamAbbr, adjProb, trackedOdds, trackedEdge, isTracked, authHeaders,
+  gameDate, batter, playerName, teamAbbr, adjProb, trackedOdds, trackedEdge,
+  statType = 'home_runs', line = 0.5, isTracked, authHeaders,
 }: Props) {
   const router = useRouter();
   const [phase,      setPhase]      = useState<Phase>(isTracked ? 'tracked' : 'idle');
@@ -58,6 +71,8 @@ export default function TrackButton({
       tracked_odds: trackedOdds,
       edge:         trackedEdge,
       stake_units:  units,
+      stat_type:    statType,
+      line,
     });
 
     // eslint-disable-next-line no-console

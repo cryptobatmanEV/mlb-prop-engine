@@ -17,9 +17,17 @@ from predict.shared_parlay import fetch_batter_props
 from predict.shared_fair_odds import match_games_to_events, join_odds
 from predict.batter_props_runner import run as run_predictions, MODEL_CONFIGS
 from scripts.write_new_models_to_db import write_predictions
-from scripts.log_new_models_ai_picks import run as log_ai_picks
+from scripts.log_ai_picks_hits import run as log_ai_picks_hits
+from scripts.log_ai_picks_total_bases import run as log_ai_picks_total_bases
+from scripts.log_ai_picks_batter_ks import run as log_ai_picks_batter_ks
 
 OUT_DIR = 'data/outputs'
+
+AI_PICKS_RUNNERS = {
+    'hits': log_ai_picks_hits,
+    'total_bases': log_ai_picks_total_bases,
+    'batter_ks': log_ai_picks_batter_ks,
+}
 
 MARKET_CONFIGS = {
     'hits':        dict(market_key='player_hits', table='hits_predictions', stat_prefix='hits'),
@@ -85,8 +93,7 @@ def run(date_str=None):
 
         write_predictions(mcfg['table'], mcfg['stat_prefix'], rows)
 
-        ai_picks_table = mcfg['table'].replace('_predictions', '_ai_picks_log')
-        log_ai_picks(ai_picks_table, priced, date_str)
+        AI_PICKS_RUNNERS[model_key](date_str)
 
 
 if __name__ == '__main__':

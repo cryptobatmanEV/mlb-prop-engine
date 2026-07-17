@@ -64,6 +64,30 @@ export async function GET(req: Request) {
       SELECT * FROM tracked_bets WHERE discord_user_id = ${discordUserId} ORDER BY created_at DESC
     `;
 
+    // Per-stat-type breakdown, so the tracker page can show ALL / HR / HITS /
+    // TOTAL BASES / STRIKEOUTS separately as well as combined.
+    const byStatTypeRaw = (await sql`
+      SELECT
+        COALESCE(stat_type, 'home_runs')                                                         AS stat_type,
+        COUNT(*)::int                                                                              AS total_bets,
+        COUNT(*) FILTER (WHERE hit_hr IS NOT NULL)::int                                           AS settled_bets,
+        COUNT(*) FILTER (WHERE hit_hr = true)::int                                                AS wins,
+        COALESCE(SUM(CASE WHEN hit_hr IS NOT NULL THEN stake_units ELSE 0 END), 0)::float         AS settled_staked,
+        COALESCE(SUM(CASE
+          WHEN hit_hr = true  AND tracked_odds >  0 THEN stake_units * (tracked_odds::float / 100.0)
+          WHEN hit_hr = true  AND tracked_odds <= 0 THEN stake_units * (100.0 / ABS(tracked_odds::float))
+          WHEN hit_hr = false                       THEN -stake_units
+          ELSE 0
+        END), 0)::float AS total_profit
+      FROM tracked_bets
+      WHERE discord_user_id = ${discordUserId}
+      GROUP BY COALESCE(stat_type, 'home_runs')
+    `) as {
+      stat_type: string; total_bets: number; settled_bets: number; wins: number;
+      settled_staked: number; total_profit: number;
+    }[];
+    const byStatType = Object.fromEntries(byStatTypeRaw.map(r => [r.stat_type, r]));
+
     // Cumulative P/L over time — settled bets, chronological order
     const settled = (await sql`
       SELECT game_date, hit_hr, tracked_odds, stake_units
@@ -141,7 +165,7 @@ export async function GET(req: Request) {
 
     const aiPicks = aiPicksRaw[0] ?? { total_picks: 0, settled_picks: 0, hits: 0, total_profit: 0 };
 
-    return NextResponse.json({ tracker, bets, plData, calibData, aiPicks });
+    return NextResponse.json({ tracker, bets, plData, calibData, aiPicks, byStatType });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('[tracker-data] DB error:', message);

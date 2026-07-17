@@ -21,12 +21,16 @@ for a game that already happened).
 Output: data/processed/batter_props_training_dataset.parquet
 """
 import pandas as pd
+import numpy as np
 import os
 
 STORE        = 'data/raw/statcast_batted_balls.parquet'
 BATTER       = 'data/processed/batter_pa_features.parquet'
 PITCHER      = 'data/processed/pitcher_pa_features.parquet'
 PITCHER_LOG  = 'data/processed/pitcher_game_log_features.parquet'
+PLATOON      = 'data/processed/batter_platoon_pa_features.parquet'
+WEATHER      = 'data/processed/weather.parquet'
+PARK_TB      = 'data/processed/park_tb_factor.csv'
 OUT          = 'data/processed/batter_props_training_dataset.parquet'
 
 
@@ -110,11 +114,19 @@ def build():
     batter  = pd.read_parquet(BATTER)
     pitcher = pd.read_parquet(PITCHER)
     pitcher_log = pd.read_parquet(PITCHER_LOG)
+    platoon = pd.read_parquet(PLATOON)
+
+    print("Finding home_team per game (for weather + park factor joins)...")
+    game_home = store[['game_pk', 'home_team']].drop_duplicates('game_pk')
 
     print("Assembling...")
     df = batter.merge(matchup, on=['batter', 'game_pk'], how='left')
     df = df.merge(team_order, on=['batter', 'game_pk'], how='left')
     df = df.merge(team_k, on=['team', 'game_pk'], how='left')
+    df = df.merge(game_home, on='game_pk', how='left')
+
+    platoon_cols = ['batter', 'game_pk'] + [c for c in platoon.columns if c not in ('batter', 'game_pk', 'game_date')]
+    df = df.merge(platoon[platoon_cols], on=['batter', 'game_pk'], how='left')
 
     pcols = ['pitcher', 'game_pk'] + [c for c in pitcher.columns if c.startswith('p_')]
     df = df.merge(pitcher[pcols], on=['pitcher', 'game_pk'], how='left')
@@ -122,6 +134,29 @@ def build():
     plog_cols = ['pitcher', 'game_pk', 'p_hits_per9_10', 'p_hr_per9_10',
                  'p_k_per9_10', 'p_k_rate_10']
     df = df.merge(pitcher_log[plog_cols], on=['pitcher', 'game_pk'], how='left')
+
+    print("Joining weather (is_dome, wind_out) and TB park factor...")
+    if os.path.exists(WEATHER):
+        weather = pd.read_parquet(WEATHER)
+        weather['game_date'] = pd.to_datetime(weather['game_date'])
+        df = df.merge(weather[['game_date', 'home_team', 'wind_favor', 'is_dome']],
+                      on=['game_date', 'home_team'], how='left')
+        # wind_out: wind blowing out toward the outfield by a meaningful margin
+        # (matches the ">= 0.3 of wind_speed toward OF" threshold used for the
+        # HR model's wind_description labeling in predict/daily_runner.py).
+        df['wind_out'] = (df['wind_favor'] >= 3).astype(int)
+        df = df.drop(columns=['wind_favor'])
+    else:
+        print("  WARNING: weather.parquet not found -- skipping is_dome/wind_out.")
+        df['is_dome'] = np.nan
+        df['wind_out'] = np.nan
+
+    if os.path.exists(PARK_TB):
+        park_tb = pd.read_csv(PARK_TB)[['park', 'tb_park_factor']]
+        df = df.merge(park_tb, left_on='home_team', right_on='park', how='left').drop(columns=['park'])
+    else:
+        print("  WARNING: park_tb_factor.csv not found -- skipping tb_park_factor.")
+        df['tb_park_factor'] = np.nan
 
     # p_throws (pitcher handedness) already came in via pitcher[pcols] above
     # (pitcher_pa_features.parquet groups by p_throws).
@@ -142,6 +177,10 @@ def build():
     print(f"\nbat_order coverage: {df['bat_order'].notna().mean():.1%}")
     print(f"opp_k_pct_15 coverage: {df['opp_k_pct_15'].notna().mean():.1%}")
     print(f"p_k_per9_10 coverage: {df['p_k_per9_10'].notna().mean():.1%}")
+    print(f"batting_avg_last_5 coverage: {df['batting_avg_last_5'].notna().mean():.1%}")
+    print(f"batting_avg_vs_R_15/vs_L_15 coverage: {df['batting_avg_vs_R_15'].notna().mean():.1%} / {df['batting_avg_vs_L_15'].notna().mean():.1%}")
+    print(f"is_dome coverage: {df['is_dome'].notna().mean():.1%}")
+    print(f"tb_park_factor coverage: {df['tb_park_factor'].notna().mean():.1%}")
 
 
 if __name__ == '__main__':

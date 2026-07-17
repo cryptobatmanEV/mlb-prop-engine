@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import TrackButton from './TrackButton';
+import TrackButton, { trackedKey } from './TrackButton';
 import type { Row } from './PropsTable';
 
 // ── Config ─────────────────────────────────────────────────────────────────
@@ -283,7 +283,7 @@ export default function AiPicks({ rows, trackedSet, authHeaders }: { rows: Row[]
                   adjProb={row.adj_prob}
                   trackedOdds={row.best_odds}
                   trackedEdge={row.edge}
-                  isTracked={trackedSet.has(`${toISODate(row.game_date)}-${row.batter}`)}
+                  isTracked={trackedSet.has(trackedKey(toISODate(row.game_date), row.batter))}
                   authHeaders={authHeaders}
                 />
               </div>

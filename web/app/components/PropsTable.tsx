@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect, Fragment } from 'react';
-import TrackButton from './TrackButton';
+import TrackButton, { trackedKey, type StatType } from './TrackButton';
 import AiPicks from './AiPicks';
 import { useIframeIdentity, identityHeaders } from '../lib/iframeIdentity';
 
@@ -666,8 +666,8 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
       .then(data => {
         if (cancelled || !Array.isArray(data.bets)) return;
         const set = new Set<string>(
-          data.bets.map((b: { game_date: unknown; batter: unknown }) =>
-            `${toISODate(b.game_date)}-${String(b.batter)}`)
+          data.bets.map((b: { game_date: unknown; batter: unknown; stat_type?: string; line?: number }) =>
+            trackedKey(toISODate(b.game_date), Number(b.batter), (b.stat_type as StatType) ?? 'home_runs', b.line ?? 0.5))
         );
         setTrackedSet(set);
       })
@@ -1043,7 +1043,7 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                           adjProb={row.adj_prob}
                           trackedOdds={trackedOdds}
                           trackedEdge={trackedEdge}
-                          isTracked={trackedSet.has(`${toISODate(row.game_date)}-${row.batter}`)}
+                          isTracked={trackedSet.has(trackedKey(toISODate(row.game_date), row.batter))}
                           authHeaders={authHeaders}
                         />
                       </td>
@@ -1221,7 +1221,7 @@ export default function PropsTable({ rows }: { rows: Row[] }) {
                         adjProb={row.adj_prob}
                         trackedOdds={trackedOdds}
                         trackedEdge={trackedEdge}
-                        isTracked={trackedSet.has(`${toISODate(row.game_date)}-${row.batter}`)}
+                        isTracked={trackedSet.has(trackedKey(toISODate(row.game_date), row.batter))}
                         authHeaders={authHeaders}
                       />
                     </div>

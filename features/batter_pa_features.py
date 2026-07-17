@@ -31,6 +31,8 @@ SF_EVENTS     = {'sac_fly', 'sac_fly_double_play'}
 
 W = 15  # rolling window (games)
 MIN_PERIODS = 5
+W5 = 5   # short "hot streak" window
+MIN_PERIODS_5 = 2
 
 
 def build():
@@ -129,6 +131,11 @@ def build():
         sub['barrel_pct_15']     = r['barrels'].sum() / sum_bip
         sub['xba_15']            = r['avg_xba'].mean()
         sub['xslg_15']           = r['avg_xslg'].mean()
+
+        # Short "hot streak" window -- captures recent form better than L15.
+        r5 = sub.shift(1).rolling(W5, min_periods=MIN_PERIODS_5)
+        sub['batting_avg_last_5'] = r5['h'].sum() / r5['ab'].sum()
+        sub['xslg_last_5']        = r5['avg_xslg'].mean()
 
         out.append(sub)
 

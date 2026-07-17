@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Nav from '../components/Nav';
 import PerformanceCharts, { type PLPoint, type CalibPoint } from './PerformanceCharts';
 import BetsTable from './BetsTable';
-import { type TrackedBet } from './shared';
+import { type TrackedBet, STAT_TYPE_LABEL } from './shared';
 import { useIframeIdentity, identityHeaders } from '../lib/iframeIdentity';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -25,12 +25,16 @@ type AiPicksStats = {
 };
 
 type TrackerData = {
-  tracker:   TrackerStats;
-  bets:      TrackedBet[];
-  plData:    PLPoint[];
-  calibData: CalibPoint[];
-  aiPicks:   AiPicksStats;
+  tracker:     TrackerStats;
+  bets:        TrackedBet[];
+  plData:      PLPoint[];
+  calibData:   CalibPoint[];
+  aiPicks:     AiPicksStats;
+  byStatType:  Record<string, TrackerStats>;
 };
+
+const STAT_FILTERS = ['ALL', 'home_runs', 'hits', 'total_bases', 'batter_ks'] as const;
+type StatFilter = (typeof STAT_FILTERS)[number];
 
 // ── Formatters ─────────────────────────────────────────────────────────────
 
@@ -68,6 +72,7 @@ export default function TrackerClient() {
   const [data, setData] = useState<TrackerData | null>(null);
   const [dataError, setDataError] = useState<string | null>(null);
   const [slowLoad, setSlowLoad] = useState(false);
+  const [statFilter, setStatFilter] = useState<StatFilter>('ALL');
 
   useEffect(() => {
     if (!identity) return;
@@ -155,17 +160,44 @@ export default function TrackerClient() {
     );
   }
 
-  const tracker     = data?.tracker ?? null;
-  const bets        = data?.bets ?? [];
+  const allBets     = data?.bets ?? [];
   const plData      = data?.plData ?? [];
   const calibData   = data?.calibData ?? [];
   const aiPicks     = data?.aiPicks ?? null;
+  const byStatType  = data?.byStatType ?? {};
+
+  // ALL uses the combined `tracker` stats; a specific filter uses its
+  // per-stat-type breakdown (defaulting to zeros if that stat has no bets yet).
+  const tracker = statFilter === 'ALL' ? (data?.tracker ?? null) : (byStatType[statFilter] ?? null);
+  const bets    = statFilter === 'ALL' ? allBets : allBets.filter(b => (b.stat_type ?? 'home_runs') === statFilter);
+
+  const rawTotalBets = data?.tracker ? Number(data.tracker.total_bets) : 0;
   const totalBets   = tracker ? Number(tracker.total_bets)     : 0;
   const settledBets = tracker ? Number(tracker.settled_bets)   : 0;
   const wins        = tracker ? Number(tracker.wins)           : 0;
   const staked      = tracker ? Number(tracker.settled_staked) : 0;
   const profit      = tracker ? Number(tracker.total_profit)   : 0;
   const winRate     = settledBets > 0 ? (wins / settledBets * 100).toFixed(1) + '%' : '—';
+
+  const filterTabs = (
+    <div style={{ display: 'flex', width: 'fit-content', marginBottom: '16px', border: '1px solid var(--ev-border)', borderRadius: '2px', overflow: 'hidden', flexWrap: 'wrap' }}>
+      {STAT_FILTERS.map((f, idx) => (
+        <button
+          key={f}
+          onClick={() => setStatFilter(f)}
+          style={{
+            fontFamily: 'var(--font-mono)', fontSize: '10px', letterSpacing: '2px',
+            border: 'none', cursor: 'pointer', padding: '7px 16px',
+            color: statFilter === f ? 'var(--ev-text)' : 'var(--ev-dim)',
+            background: statFilter === f ? 'rgba(255,255,255,0.07)' : 'transparent',
+            borderRight: idx < STAT_FILTERS.length - 1 ? '1px solid var(--ev-border)' : 'none',
+          }}
+        >
+          {f === 'ALL' ? 'ALL' : STAT_TYPE_LABEL[f]}
+        </button>
+      ))}
+    </div>
+  );
 
   return (
     <main style={{ minHeight: '100vh', background: 'var(--ev-bg)', padding: '32px 20px 60px' }}>
@@ -174,6 +206,9 @@ export default function TrackerClient() {
 
         {/* Nav */}
         <Nav active="tracker" />
+
+        {/* Stat type filter */}
+        {data !== null && !dataError && rawTotalBets > 0 && filterTabs}
 
         {/* Content */}
         {dataError ? (
@@ -194,7 +229,7 @@ export default function TrackerClient() {
               </div>
             )}
           </div>
-        ) : totalBets === 0 ? (
+        ) : rawTotalBets === 0 ? (
           <div style={{ ...CARD, padding: '48px', textAlign: 'center' }}>
             <div style={{ ...LABEL, color: 'var(--ev-muted)', marginBottom: '6px' }}>NO BETS TRACKED YET</div>
             <div style={{ fontSize: '11px', color: 'var(--ev-dim)' }}>

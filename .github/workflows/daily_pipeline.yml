@@ -48,15 +48,16 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      # Log yesterday's actual HR results into Neon.
-      # Reads yesterday's fair_odds CSV (committed by the previous pipeline run).
-      # Uses continue-on-error so a missing CSV on the very first run doesn't block predictions.
-      - name: Log yesterday's results
+      # Log yesterday's actual results into Neon for all 4 models (HR, Hits,
+      # Total Bases, Batter Ks). Reads yesterday's fair_odds CSVs (committed
+      # by the previous pipeline run). Uses continue-on-error so a missing
+      # CSV on the very first run doesn't block predictions.
+      - name: Log yesterday's results (all models)
         continue-on-error: true
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
-        run: python scripts/log_results.py
+        run: python scripts/daily_pipeline.py --log-only
 
       # Generate today's predictions and write to Neon (powers the web app).
       # Skipped on the 1 AM ET (6:00 UTC) run, which only logs results.

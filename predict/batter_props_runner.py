@@ -23,23 +23,40 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from predict.shared_mlb import (
     fetch_schedule, fetch_roster, fetch_lineups_by_game, TEAM_ID,
 )
+from predict.daily_runner import get_todays_weather
 from features.build_batter_props_dataset import compute_team_k_rate, derive_team_and_bat_order
 
 BATTER_PATH      = 'data/processed/batter_pa_features.parquet'
 PITCHER_PATH     = 'data/processed/pitcher_pa_features.parquet'
 PITCHER_LOG_PATH = 'data/processed/pitcher_game_log_features.parquet'
+PLATOON_PATH     = 'data/processed/batter_platoon_pa_features.parquet'
+PARK_TB_PATH     = 'data/processed/park_tb_factor.csv'
 STATCAST_PATH    = 'data/raw/statcast_batted_balls.parquet'
 OUT_DIR          = 'data/predictions'
 
+# Feature lists mirror exactly what each saved model was trained on (see
+# models/saved/{model}_metrics.json 'features' -- feature-pruning during
+# training can leave the 1+/2+ sub-models with different feature counts,
+# so predict_proba must be called with each model's own exact list, not one
+# shared list, or LightGBM raises a shape-mismatch error.
 MODEL_CONFIGS = {
     'hits': dict(
         label='Hits',
-        features=[
+        primary_features=[
             'batting_avg_15', 'obp_15', 'contact_rate_15', 'hard_hit_pct_15',
             'line_drive_pct_15', 'xba_15', 'babip_15', 'k_rate_15', 'gb_pct_15',
+            'batting_avg_vs_R_15', 'batting_avg_vs_L_15', 'batting_avg_last_5',
             'p_hits_per9_10', 'p_babip_allowed_10', 'p_contact_rate_allowed_10',
             'p_k_rate_10', 'p_gb_pct_10',
-            'bat_order', 'is_home', 'opp_k_pct_15', 'stand_R', 'p_throws_R',
+            'bat_order', 'is_home', 'opp_k_pct_15', 'stand_R', 'p_throws_R', 'is_dome',
+        ],
+        secondary_features=[
+            'batting_avg_15', 'obp_15', 'contact_rate_15', 'hard_hit_pct_15',
+            'line_drive_pct_15', 'xba_15', 'babip_15', 'k_rate_15', 'gb_pct_15',
+            'batting_avg_vs_R_15', 'batting_avg_vs_L_15', 'batting_avg_last_5',
+            'p_hits_per9_10', 'p_babip_allowed_10', 'p_contact_rate_allowed_10',
+            'p_k_rate_10', 'p_gb_pct_10',
+            'bat_order', 'opp_k_pct_15', 'stand_R', 'p_throws_R',
         ],
         model_paths=('models/saved/hits_1plus_model.pkl', 'models/saved/hits_2plus_model.pkl'),
         prob_cols=('p_hit_1plus', 'p_hit_2plus'),
@@ -48,12 +65,21 @@ MODEL_CONFIGS = {
     ),
     'total_bases': dict(
         label='Total Bases',
-        features=[
+        primary_features=[
             'avg_total_bases_15', 'xslg_15', 'barrel_pct_15', 'hard_hit_pct_15',
             'fly_ball_pct_15', 'iso_15', 'xba_15', 'hr_rate_15', 'doubles_rate_15',
+            'slg_vs_R_15', 'slg_vs_L_15', 'xslg_last_5',
             'p_slg_allowed_10', 'p_iso_allowed_10', 'p_barrel_pct_allowed_10',
             'p_fb_pct_10', 'p_hr_per9_10',
-            'bat_order', 'is_home', 'stand_R', 'p_throws_R',
+            'bat_order', 'stand_R', 'p_throws_R', 'tb_park_factor',
+        ],
+        secondary_features=[
+            'avg_total_bases_15', 'xslg_15', 'barrel_pct_15', 'hard_hit_pct_15',
+            'fly_ball_pct_15', 'iso_15', 'xba_15', 'hr_rate_15', 'doubles_rate_15',
+            'slg_vs_R_15', 'slg_vs_L_15', 'xslg_last_5',
+            'p_slg_allowed_10', 'p_iso_allowed_10', 'p_barrel_pct_allowed_10',
+            'p_fb_pct_10', 'p_hr_per9_10',
+            'bat_order', 'is_home', 'stand_R', 'p_throws_R', 'tb_park_factor', 'wind_out',
         ],
         model_paths=('models/saved/total_bases_1plus_model.pkl', 'models/saved/total_bases_2plus_model.pkl'),
         prob_cols=('p_tb_1plus', 'p_tb_2plus'),
@@ -62,8 +88,13 @@ MODEL_CONFIGS = {
     ),
     'batter_ks': dict(
         label='Batter Ks',
-        features=[
-            'k_rate_15', 'avg_k_per_game_15',
+        primary_features=[
+            'k_rate_15', 'avg_k_per_game_15', 'k_rate_vs_R_15', 'k_rate_vs_L_15',
+            'p_k_per9_10', 'p_k_rate_10',
+            'bat_order', 'opp_k_pct_15', 'stand_R', 'p_throws_R',
+        ],
+        secondary_features=[
+            'k_rate_15', 'avg_k_per_game_15', 'k_rate_vs_R_15', 'k_rate_vs_L_15',
             'p_k_per9_10', 'p_k_rate_10',
             'bat_order', 'opp_k_pct_15', 'stand_R', 'p_throws_R',
         ],
@@ -96,13 +127,23 @@ def latest_team_k_rate():
     return latest.set_index('team')['opp_k_pct_15']
 
 
-def build_matchup_rows(games, rosters, lineups_by_game, batter_idx, pitcher_idx, team_k_idx):
+def build_matchup_rows(games, rosters, lineups_by_game, batter_idx, pitcher_idx, team_k_idx,
+                        weather_idx, park_tb_idx, date_str):
     rows = []
     for game in games:
         home_abbr, away_abbr = game['home_abbr'], game['away_abbr']
         lineup_info = lineups_by_game.get(game['game_id'], {})
         batting_order = lineup_info.get('batting_order', {})
         starters = lineup_info.get('starters', set())
+
+        is_dome = np.nan
+        wind_out = np.nan
+        if home_abbr in weather_idx.index:
+            w = weather_idx.loc[home_abbr]
+            is_dome = int(w.get('is_dome', 0))
+            wind_favor = w.get('wind_favor', np.nan)
+            wind_out = int(wind_favor >= 3) if pd.notna(wind_favor) else 0
+        tb_park_factor = park_tb_idx.get(home_abbr, np.nan)
 
         sides = [
             dict(batters=rosters.get(game['home_id'], []), pitcher_id=game['away_pitcher_id'],
@@ -138,6 +179,13 @@ def build_matchup_rows(games, rosters, lineups_by_game, batter_idx, pitcher_idx,
                     'game_id': game['game_id'], 'game_time': game.get('game_time'), 'stadium': game.get('stadium'),
                     'stand_R': 1 if stand == 'R' else 0, 'p_throws_R': p_throws_R,
                     'opp_k_pct_15': team_k_idx.get(side['team_abbr']),
+                    # Pin these explicitly -- otherwise the batter-feature
+                    # merge below silently overwrites them with the batter's
+                    # OWN last-game game_date/game_pk (stale history, not
+                    # today's actual game), which broke already_logged()'s
+                    # date dedup check in scripts/shared_log_results.py.
+                    'game_date': date_str, 'game_pk': game['game_id'],
+                    'is_dome': is_dome, 'wind_out': wind_out, 'tb_park_factor': tb_park_factor,
                 }
                 for c in bf.index:
                     if c not in row:
@@ -166,10 +214,19 @@ def run(date_str=None):
     pitcher_feats = pitcher_feats.merge(
         pitcher_log_feats[['pitcher', 'p_hits_per9_10', 'p_hr_per9_10', 'p_k_per9_10', 'p_k_rate_10']],
         on='pitcher', how='left')
+
+    platoon_feats = load_latest(PLATOON_PATH, 'batter')
+    platoon_cols = [c for c in platoon_feats.columns if c not in ('batter', 'game_pk', 'game_date')]
+    batter_feats = batter_feats.merge(platoon_feats[['batter'] + platoon_cols], on='batter', how='left')
+
     print(f"  {batter_feats['batter'].nunique():,} batters | {pitcher_feats['pitcher'].nunique():,} pitchers")
 
     print("\nComputing latest team K rate context...")
     team_k_idx = latest_team_k_rate()
+
+    print("\nLoading TB park factors...")
+    park_tb_idx = (pd.read_csv(PARK_TB_PATH).set_index('park')['tb_park_factor']
+                   if os.path.exists(PARK_TB_PATH) else pd.Series(dtype=float))
 
     print(f"\nFetching schedule for {date_str}...")
     all_games = fetch_schedule(date_str)
@@ -178,6 +235,9 @@ def run(date_str=None):
         print("No games today (or all final). Exiting.")
         return {}
     print(f"  {len(games)} games")
+
+    print(f"\nFetching weather for {date_str}...")
+    weather_idx = get_todays_weather(date_str)
 
     print("\nFetching active rosters...")
     team_ids = {g['home_id'] for g in games} | {g['away_id'] for g in games}
@@ -197,7 +257,8 @@ def run(date_str=None):
     print("\nAssembling matchup rows...")
     batter_idx = batter_feats.set_index('batter')
     pitcher_idx = pitcher_feats.set_index('pitcher')
-    df = build_matchup_rows(games, rosters, lineups_by_game, batter_idx, pitcher_idx, team_k_idx)
+    df = build_matchup_rows(games, rosters, lineups_by_game, batter_idx, pitcher_idx, team_k_idx,
+                            weather_idx, park_tb_idx, date_str)
     if df.empty:
         print("No rows assembled.")
         return {}
@@ -208,14 +269,18 @@ def run(date_str=None):
     for model_key, cfg in MODEL_CONFIGS.items():
         print(f"\nScoring {cfg['label']}...")
         X = df.copy()
-        for f in cfg['features']:
+        all_features = set(cfg['primary_features']) | set(cfg['secondary_features'])
+        for f in all_features:
             if f not in X.columns:
                 X[f] = np.nan
+        # Columns that are all/mostly None (e.g. bat_order before lineups
+        # post) can end up as object dtype, which LightGBM rejects outright.
+        X[list(all_features)] = X[list(all_features)].apply(pd.to_numeric, errors='coerce')
         p1_path, p2_path = cfg['model_paths']
         m1, m2 = joblib.load(p1_path), joblib.load(p2_path)
         c1, c2 = cfg['prob_cols']
-        X[c1] = m1.predict_proba(X[cfg['features']])[:, 1]
-        X[c2] = m2.predict_proba(X[cfg['features']])[:, 1]
+        X[c1] = m1.predict_proba(X[cfg['primary_features']])[:, 1]
+        X[c2] = m2.predict_proba(X[cfg['secondary_features']])[:, 1]
         X['adj_prob'] = X[c1]
         X[cfg['pred_col']] = X[cfg['pred_from']]
 

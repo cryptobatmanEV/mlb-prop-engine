@@ -4,6 +4,10 @@ Full daily pipeline - run everything in one command.
 Usage:
     python scripts/daily_pipeline.py              # today
     python scripts/daily_pipeline.py 2026-06-07   # specific date
+    python scripts/daily_pipeline.py --log-only [date]  # grade yesterday's
+        results for all 4 models (HR + Hits/Total Bases/Batter Ks), no new
+        predictions. This is what the 6 AM ET GitHub Actions run uses --
+        it gives the prior evening's late games time to finalize.
 
 Steps (run in order):
     1. update_statcast  -- pull new Statcast PA-outcome data through yesterday
@@ -46,6 +50,24 @@ def _run_step(label, fn, *args):
         print(f"  FAILED after {time.time()-t0:.1f}s: {e}")
         traceback.print_exc()
         return None, False
+
+
+def log_results_only(date_str=None):
+    """Grade the prior day's results for all 4 models. No new predictions."""
+    print(f"\n{'#'*60}")
+    print(f"#  Log Results Only  --  {date_str or '(yesterday)'}")
+    print(f"{'#'*60}")
+
+    from scripts.log_results import run as hr_results_run
+    _run_step("HR results", hr_results_run, date_str)
+
+    from scripts.shared_log_results import run as shared_run
+    _run_step("Hits results", shared_run, 'hits', 'hits_predictions', 'hits_ai_picks_log',
+              'hits', 0.5, 1.5, date_str)
+    _run_step("Total Bases results", shared_run, 'total_bases', 'total_bases_predictions',
+              'total_bases_ai_picks_log', 'totalBases', 0.5, 1.5, date_str)
+    _run_step("Batter Ks results", shared_run, 'batter_ks', 'batter_ks_predictions',
+              'batter_ks_ai_picks_log', 'strikeOuts', 0.5, 1.5, date_str)
 
 
 def run(date_str=None):
@@ -93,10 +115,16 @@ def run(date_str=None):
     print(f"#  Web app     : powered by Neon DB (check your Vercel URL)")
     print(f"#")
     print(f"#  Tomorrow morning, log actual results:")
-    print(f"#  python scripts/log_results.py {date_str}")
+    print(f"#  python scripts/daily_pipeline.py --log-only {date_str}")
     print(f"{'#'*60}")
 
 
 if __name__ == '__main__':
-    date_arg = sys.argv[1] if len(sys.argv) > 1 else None
-    run(date_arg)
+    args = sys.argv[1:]
+    if '--log-only' in args:
+        args = [a for a in args if a != '--log-only']
+        date_arg = args[0] if args else None
+        log_results_only(date_arg)
+    else:
+        date_arg = args[0] if args else None
+        run(date_arg)

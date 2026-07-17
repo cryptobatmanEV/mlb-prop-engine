@@ -73,7 +73,17 @@ MIGRATE_TRACKED_BETS = [
     "ALTER TABLE tracked_bets RENAME COLUMN best_odds TO tracked_odds",
     "ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS tracked_odds INTEGER",
     "ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS settled BOOLEAN NOT NULL DEFAULT false",
-    "ALTER TABLE tracked_bets ADD CONSTRAINT IF NOT EXISTS tracked_bets_date_batter_key UNIQUE (game_date, batter)",
+    # stat_type/line support all 4 Batter Model tabs sharing one tracked_bets
+    # table; the old (game_date, batter) constraint would collide across
+    # stat types, so it's replaced with (game_date, batter, stat_type, line).
+    # Note: Postgres doesn't support "ADD CONSTRAINT IF NOT EXISTS" (unlike
+    # ADD COLUMN) -- this relies on the per-statement savepoint/rollback in
+    # run() below to swallow the duplicate-constraint error on repeat runs.
+    "ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS stat_type TEXT DEFAULT 'home_runs'",
+    "ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS line FLOAT DEFAULT 0.5",
+    "ALTER TABLE tracked_bets DROP CONSTRAINT IF EXISTS tracked_bets_date_batter_key",
+    "ALTER TABLE tracked_bets ADD CONSTRAINT tracked_bets_date_batter_stat_line_key "
+    "UNIQUE (game_date, batter, stat_type, line)",
 ]
 
 MIGRATE_HR_PREDICTIONS = [

@@ -1,14 +1,42 @@
 {
   "target_k_1plus": {
-    "brier": 0.23233939454651772,
-    "log_loss": 0.6568916977577144,
-    "mae": 0.46694302356411255,
-    "auc": 0.6389858325775175
+    "brier": 0.23150416853377256,
+    "log_loss": 0.6551304066197418,
+    "mae": 0.4654644325274204,
+    "auc": 0.6430076380867933,
+    "features": [
+      "k_rate_15",
+      "avg_k_per_game_15",
+      "k_rate_vs_R_15",
+      "k_rate_vs_L_15",
+      "p_k_per9_10",
+      "p_k_rate_10",
+      "bat_order",
+      "opp_k_pct_15",
+      "stand_R",
+      "p_throws_R"
+    ],
+    "promoted": true,
+    "prev_auc": null
   },
   "target_k_2plus": {
-    "brier": 0.14108255051588808,
-    "log_loss": 0.44778553352913747,
-    "mae": 0.28566288363302034,
-    "auc": 0.6645526845450993
+    "brier": 0.14080883190609061,
+    "log_loss": 0.4468058584042911,
+    "mae": 0.28496129199229053,
+    "auc": 0.6678188666377036,
+    "features": [
+      "k_rate_15",
+      "avg_k_per_game_15",
+      "k_rate_vs_R_15",
+      "k_rate_vs_L_15",
+      "p_k_per9_10",
+      "p_k_rate_10",
+      "bat_order",
+      "opp_k_pct_15",
+      "stand_R",
+      "p_throws_R"
+    ],
+    "promoted": true,
+    "prev_auc": null
   }
 }

@@ -8,11 +8,14 @@ export async function POST(req: NextRequest) {
     const {
       game_date, batter, player_name, team_abbr,
       adj_prob, tracked_odds, edge, stake_units,
+      stat_type, line,
     } = body;
 
     if (!game_date || batter == null || stake_units == null || stake_units <= 0) {
       return NextResponse.json({ error: 'Missing or invalid fields' }, { status: 400 });
     }
+    const statType = stat_type ?? 'home_runs';
+    const betLine  = line ?? 0.5;
 
     const sql = getDb();
 
@@ -34,11 +37,27 @@ export async function POST(req: NextRequest) {
         created_at   TIMESTAMPTZ DEFAULT NOW(),
         discord_user_id  TEXT,
         discord_username TEXT,
-        UNIQUE (game_date, batter)
+        stat_type    TEXT        DEFAULT 'home_runs',
+        line         FLOAT       DEFAULT 0.5,
+        UNIQUE (game_date, batter, stat_type, line)
       )
     `;
     await sql`ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS discord_user_id TEXT`;
     await sql`ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS discord_username TEXT`;
+    await sql`ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS stat_type TEXT DEFAULT 'home_runs'`;
+    await sql`ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS line FLOAT DEFAULT 0.5`;
+    await sql`ALTER TABLE tracked_bets DROP CONSTRAINT IF EXISTS tracked_bets_date_batter_key`;
+    // Postgres has no "ADD CONSTRAINT IF NOT EXISTS" -- swallow the
+    // duplicate-object error (42710) once the constraint already exists.
+    try {
+      await sql`
+        ALTER TABLE tracked_bets ADD CONSTRAINT tracked_bets_date_batter_stat_line_key
+          UNIQUE (game_date, batter, stat_type, line)
+      `;
+    } catch (err) {
+      const code = (err as { code?: string })?.code;
+      if (code !== '42710') throw err;
+    }
 
     const identity = getVerifiedIdentity(req);
     const discordUserId   = identity?.discordId ?? null;
@@ -46,11 +65,11 @@ export async function POST(req: NextRequest) {
 
     const result = await sql`
       INSERT INTO tracked_bets
-        (game_date, batter, player_name, team_abbr, adj_prob, tracked_odds, edge, stake_units, settled, discord_user_id, discord_username)
+        (game_date, batter, player_name, team_abbr, adj_prob, tracked_odds, edge, stake_units, settled, discord_user_id, discord_username, stat_type, line)
       VALUES
         (${game_date}, ${batter}, ${player_name ?? null}, ${team_abbr ?? null},
-         ${adj_prob ?? null}, ${tracked_odds ?? null}, ${edge ?? null}, ${stake_units}, false, ${discordUserId}, ${discordUsername})
-      ON CONFLICT (game_date, batter) DO UPDATE SET
+         ${adj_prob ?? null}, ${tracked_odds ?? null}, ${edge ?? null}, ${stake_units}, false, ${discordUserId}, ${discordUsername}, ${statType}, ${betLine})
+      ON CONFLICT (game_date, batter, stat_type, line) DO UPDATE SET
         player_name      = EXCLUDED.player_name,
         adj_prob          = EXCLUDED.adj_prob,
         tracked_odds      = EXCLUDED.tracked_odds,

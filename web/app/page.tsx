@@ -1,6 +1,6 @@
 import { getDb } from '@/lib/db';
 import PropsTable, { Row } from './components/PropsTable';
-import BatterPropsTable, { PropRow, PropConfig } from './components/BatterPropsTable';
+import BatterPropsTable, { PropRow, PropConfig, AiPickRow } from './components/BatterPropsTable';
 import DateNav from './components/DateNav';
 import Nav from './components/Nav';
 import PropTypeTabs, { StatType } from './components/PropTypeTabs';
@@ -10,15 +10,15 @@ export const dynamic = 'force-dynamic';
 const STAT_CONFIG: Record<Exclude<StatType, 'hr'>, { table: string; config: PropConfig }> = {
   hits: {
     table: 'hits_predictions',
-    config: { label: 'Hits', prob1Label: 'P(1+ H)', prob2Label: 'P(2+ H)', projLabel: 'PROJ HITS' },
+    config: { label: 'Hits', prob1Label: 'P(1+ H)', prob2Label: 'P(2+ H)', projLabel: 'PROJ HITS', statType: 'hits' },
   },
   total_bases: {
     table: 'total_bases_predictions',
-    config: { label: 'Total Bases', prob1Label: 'P(1+ TB)', prob2Label: 'P(2+ TB)', projLabel: 'PROJ TB' },
+    config: { label: 'Total Bases', prob1Label: 'P(1+ TB)', prob2Label: 'P(2+ TB)', projLabel: 'PROJ TB', statType: 'total_bases' },
   },
   batter_ks: {
     table: 'batter_ks_predictions',
-    config: { label: 'Strikeouts', prob1Label: 'P(0.5+ K)', prob2Label: 'P(1.5+ K)', projLabel: 'PROJ K' },
+    config: { label: 'Strikeouts', prob1Label: 'P(0.5+ K)', prob2Label: 'P(1.5+ K)', projLabel: 'PROJ K', statType: 'batter_ks' },
   },
 };
 
@@ -69,6 +69,7 @@ export default async function Home({
 
   let rows:        Row[]         = [];
   let propRows:    PropRow[]     = [];
+  let aiPickRows:  AiPickRow[]   = [];
   let dbError:     string | null = null;
   let lastUpdated: string | null = null;
 
@@ -128,6 +129,20 @@ export default async function Home({
         lastUpdated = new Date(luRow.ts).toLocaleTimeString('en-US', {
           hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/New_York',
         });
+      }
+
+      const aiPicksTable = table.replace('_predictions', '_ai_picks_log');
+      try {
+        aiPickRows = await sql(
+          `SELECT batter, player_name, team_abbr, bat_order, best_odds, best_book,
+                  edge, adj_prob, book_line, book_side, composite_score, result
+             FROM ${aiPicksTable}
+            WHERE game_date = $1::date
+            ORDER BY composite_score DESC`,
+          [validDate],
+        ) as unknown as AiPickRow[];
+      } catch {
+        aiPickRows = [];
       }
     }
   } catch (err) {
@@ -199,7 +214,7 @@ export default async function Home({
         ) : isHrTab ? (
           <PropsTable rows={rows} />
         ) : (
-          <BatterPropsTable rows={propRows} config={STAT_CONFIG[stat].config} />
+          <BatterPropsTable rows={propRows} config={STAT_CONFIG[stat].config} aiPicks={aiPickRows} />
         )}
 
         {/* Legend */}

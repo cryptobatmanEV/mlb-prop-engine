@@ -13,6 +13,15 @@ export type TrackedBet = {
   created_at:   string;
   discord_user_id:  string | null;
   discord_username: string | null;
+  stat_type:    string | null;  // 'home_runs' | 'hits' | 'total_bases' | 'batter_ks'
+  line:         number | null;
+};
+
+export const STAT_TYPE_LABEL: Record<string, string> = {
+  home_runs:    'HOME RUNS',
+  hits:         'HITS',
+  total_bases:  'TOTAL BASES',
+  batter_ks:    'STRIKEOUTS',
 };
 
 // Postgres DATE columns come back from Neon as JS Date objects, not strings.

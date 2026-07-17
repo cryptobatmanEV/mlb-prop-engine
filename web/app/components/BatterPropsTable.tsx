@@ -1,6 +1,8 @@
 'use client';
 
-import { useState, useMemo, Fragment } from 'react';
+import { useState, useMemo, useEffect, Fragment } from 'react';
+import TrackButton, { trackedKey, type StatType } from './TrackButton';
+import { useIframeIdentity, identityHeaders } from '../lib/iframeIdentity';
 
 // ── Book logos (same set as PropsTable) ─────────────────────────────────────
 
@@ -78,6 +80,22 @@ export type PropConfig = {
   prob1Label: string;     // "P(1+ H)"
   prob2Label: string;     // "P(2+ H)"
   projLabel: string;      // "PROJ HITS"
+  statType: StatType;     // 'hits' | 'total_bases' | 'batter_ks'
+};
+
+export type AiPickRow = {
+  batter: number;
+  player_name: string;
+  team_abbr: string | null;
+  bat_order: number | null;
+  best_odds: number | null;
+  best_book: string | null;
+  edge: number | null;
+  adj_prob: number | null;
+  book_line: number | null;
+  book_side: string | null;
+  composite_score: number | null;
+  result: string | null;  // 'HIT' | 'MISS' | null (pending)
 };
 
 function fmtProj(v: number | null): string { return v == null ? '—' : v.toFixed(2); }
@@ -112,12 +130,157 @@ const TH_BASE: React.CSSProperties = {
 };
 const STICKY_BG = '#0a0d0f';
 
-export default function BatterPropsTable({ rows, config }: { rows: PropRow[]; config: PropConfig }) {
+function toISODate(d: unknown): string {
+  if (d instanceof Date) return d.toISOString().slice(0, 10);
+  return String(d).slice(0, 10);
+}
+
+// ── AI Picks view ──────────────────────────────────────────────────────────
+// Reads pre-computed picks from {model}_ai_picks_log (scripts/log_ai_picks_*.py)
+// rather than re-deriving each model's composite-score formula in TS -- those
+// formulas differ meaningfully per model (see the Python scripts), so a
+// single source of truth avoids drift.
+
+function BatterAiPicks({ picks, config, gameDate, trackedSet, authHeaders }: {
+  picks: AiPickRow[]; config: PropConfig; gameDate: string;
+  trackedSet: Set<string>; authHeaders?: HeadersInit;
+}) {
+  if (picks.length === 0) {
+    return (
+      <div style={{ background: 'var(--ev-card)', border: '1px solid var(--ev-border)', borderRadius: '2px', padding: '48px', textAlign: 'center' }}>
+        <div style={{ ...LABEL, color: 'var(--ev-muted)', marginBottom: '6px' }}>NO AI PICKS TODAY</div>
+        <div style={{ fontSize: '11px', color: 'var(--ev-dim)' }}>
+          Nothing cleared {config.label}&rsquo;s qualification threshold yet. Check back after lineups/odds refresh.
+        </div>
+      </div>
+    );
+  }
+
+  const wins    = picks.filter(p => p.result === 'HIT').length;
+  const losses  = picks.filter(p => p.result === 'MISS').length;
+  const settled = wins + losses;
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+        <div style={{ ...LABEL, letterSpacing: '2px' }}>
+          TOP {picks.length} {config.label.toUpperCase()} PLAY{picks.length !== 1 ? 'S' : ''}
+        </div>
+        {settled > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '2px', fontFamily: 'var(--font-mono)', fontSize: '13px', fontWeight: 700 }}>
+            <span style={{ color: 'var(--ev-green)' }}>{wins}W</span>
+            <span style={{ color: 'rgba(255,255,255,0.2)', margin: '0 2px' }}>-</span>
+            <span style={{ color: 'var(--ev-red)' }}>{losses}L</span>
+            {picks.length > settled && (
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--ev-dim)', fontWeight: 400, marginLeft: '6px', letterSpacing: '1px' }}>
+                {picks.length - settled} PENDING
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+      <div className="ai-picks-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px' }}>
+        {picks.map((p, idx) => {
+          const edgePct = p.edge != null ? p.edge * 100 : null;
+          return (
+            <div key={p.batter} style={{ background: 'var(--ev-card)', border: '1px solid var(--ev-border)', borderRadius: '2px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                <div>
+                  <div style={{ fontFamily: 'var(--font-syne)', fontWeight: 800, fontSize: '15px', color: 'var(--ev-text)', letterSpacing: '-0.3px' }}>
+                    {p.player_name}
+                  </div>
+                  <div style={{ ...LABEL, marginTop: '4px', fontSize: '9px' }}>
+                    {p.team_abbr ?? '—'}{p.bat_order != null && <> &middot; BO {p.bat_order}</>}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '5px' }}>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '2px', color: 'var(--ev-green)', border: '1px solid rgba(0,220,110,0.3)', borderRadius: '2px', padding: '3px 6px', whiteSpace: 'nowrap' }}>
+                    #{idx + 1} PICK
+                  </div>
+                  {p.result === 'HIT' && (
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: 700, color: '#0a0d0f', background: 'var(--ev-green)', borderRadius: '2px', padding: '2px 8px', letterSpacing: '1px' }}>W</div>
+                  )}
+                  {p.result === 'MISS' && (
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: 700, color: '#fff', background: 'var(--ev-red)', borderRadius: '2px', padding: '2px 8px', letterSpacing: '1px' }}>L</div>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '20px' }}>
+                <div>
+                  <div style={{ ...LABEL, fontSize: '9px', marginBottom: '3px' }}>LINE</div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', fontWeight: 600 }}>
+                    {p.book_line != null ? `O ${p.book_line}` : '—'}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ ...LABEL, fontSize: '9px', marginBottom: '3px' }}>ODDS</div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', fontWeight: 600, color: 'var(--ev-blue)' }}>
+                    {fmtOdds(p.best_odds)}{p.best_book && <span style={{ color: 'var(--ev-dim)', fontWeight: 400 }}> {p.best_book}</span>}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ ...LABEL, fontSize: '9px', marginBottom: '3px' }}>ADJ%</div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', fontWeight: 600 }}>{fmtProb(p.adj_prob)}</div>
+                </div>
+                <div>
+                  <div style={{ ...LABEL, fontSize: '9px', marginBottom: '3px' }}>EDGE</div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', fontWeight: 600, color: edgePct != null && edgePct > 0 ? 'var(--ev-green)' : 'var(--ev-muted)' }}>
+                    {edgePct != null ? `${edgePct >= 0 ? '+' : ''}${edgePct.toFixed(1)}%` : '—'}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <TrackButton
+                  gameDate={gameDate}
+                  batter={p.batter}
+                  playerName={p.player_name}
+                  teamAbbr={p.team_abbr ?? ''}
+                  adjProb={p.adj_prob ?? 0}
+                  trackedOdds={p.best_odds}
+                  trackedEdge={p.edge}
+                  statType={config.statType}
+                  line={p.book_line ?? 0.5}
+                  isTracked={trackedSet.has(trackedKey(gameDate, p.batter, config.statType, p.book_line ?? 0.5))}
+                  authHeaders={authHeaders}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+export default function BatterPropsTable({ rows, config, aiPicks }: { rows: PropRow[]; config: PropConfig; aiPicks: AiPickRow[] }) {
   const [sortKey, setSortKey]   = useState<SortKey>('p_stat_1plus');
   const [sortDir, setSortDir]   = useState<SortDir>('desc');
   const [evOnly, setEvOnly]     = useState(false);
   const [expanded, setExpanded] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [viewMode, setViewMode] = useState<'edge' | 'ai'>('edge');
+  const [trackedSet, setTrackedSet]   = useState<Set<string>>(new Set());
+  const identity    = useIframeIdentity();
+  const authHeaders = identityHeaders(identity);
+
+  useEffect(() => {
+    if (identity === undefined) return;
+    let cancelled = false;
+    fetch('/api/tracked', { headers: identityHeaders(identity) })
+      .then(res => res.json())
+      .then(data => {
+        if (cancelled || !Array.isArray(data.bets)) return;
+        const set = new Set<string>(
+          data.bets.map((b: { game_date: unknown; batter: unknown; stat_type?: string; line?: number }) =>
+            trackedKey(toISODate(b.game_date), Number(b.batter), (b.stat_type as StatType) ?? 'home_runs', b.line ?? 0.5))
+        );
+        setTrackedSet(set);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [identity]);
 
   const searchFiltered = useMemo(() => {
     if (!searchQuery.trim()) return rows;
@@ -164,6 +327,7 @@ export default function BatterPropsTable({ rows, config }: { rows: PropRow[]; co
     { key: null, label: `BOOK (${rows[0]?.primary_line ?? '0.5'})`, align: 'right' },
     { key: null, label: `BOOK (${rows[0]?.secondary_line ?? '1.5'})`, align: 'right' },
     { key: 'primary_edge', label: 'EDGE', align: 'right' },
+    { key: null, label: 'TRACK', align: 'right' },
   ];
 
   return (
@@ -194,11 +358,41 @@ export default function BatterPropsTable({ rows, config }: { rows: PropRow[]; co
         >
           +EV ONLY
         </button>
+
+        <div style={{ display: 'flex', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '2px', overflow: 'hidden' }}>
+          {(['edge', 'ai'] as const).map((mode, i, arr) => (
+            <button
+              key={mode}
+              onClick={() => setViewMode(mode)}
+              style={{
+                fontFamily: 'var(--font-mono)', fontSize: '10px', letterSpacing: '2px',
+                textTransform: 'uppercase', padding: '5px 11px', cursor: 'pointer',
+                border: 'none', borderRight: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.12)' : 'none',
+                background: viewMode === mode ? 'rgba(255,255,255,0.07)' : 'transparent',
+                color: viewMode === mode ? 'var(--ev-text)' : 'var(--ev-dim)',
+              }}
+            >
+              {mode === 'edge' ? 'BY EDGE' : 'AI PICKS'}
+            </button>
+          ))}
+        </div>
+
         <span style={{ ...LABEL, fontSize: '10px' }}>
           {evOnly ? `SHOWING ${evCount} +EV PLAY${evCount !== 1 ? 'S' : ''}` : `${evCount} +EV / ${rows.length} TOTAL`}
         </span>
       </div>
 
+      {viewMode === 'ai' && (
+        <BatterAiPicks
+          picks={aiPicks}
+          config={config}
+          gameDate={rows[0] ? toISODate(rows[0].game_date) : ''}
+          trackedSet={trackedSet}
+          authHeaders={authHeaders}
+        />
+      )}
+
+      {viewMode !== 'ai' && (
       <div className="desktop-table-wrap" style={{
         background: 'var(--ev-card)', border: '1px solid var(--ev-border)', borderRadius: '2px', overflowX: 'auto',
       }}>
@@ -268,6 +462,21 @@ export default function BatterPropsTable({ rows, config }: { rows: PropRow[]; co
                       ) : <span style={{ color: 'var(--ev-dim)', fontSize: '11px' }}>—</span>}
                     </td>
                     <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', color: edgeColor, fontWeight: edgeWeight }}>{edgeText}</td>
+                    <td style={{ padding: '8px 14px', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
+                      <TrackButton
+                        gameDate={toISODate(row.game_date)}
+                        batter={row.batter}
+                        playerName={row.player_name}
+                        teamAbbr={row.team_abbr}
+                        adjProb={row.p_stat_1plus ?? 0}
+                        trackedOdds={row.primary_best_odds}
+                        trackedEdge={row.primary_edge}
+                        statType={config.statType}
+                        line={row.primary_line ?? 0.5}
+                        isTracked={trackedSet.has(trackedKey(toISODate(row.game_date), row.batter, config.statType, row.primary_line ?? 0.5))}
+                        authHeaders={authHeaders}
+                      />
+                    </td>
                   </tr>
                   {isExpanded && (
                     <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
@@ -313,6 +522,7 @@ export default function BatterPropsTable({ rows, config }: { rows: PropRow[]; co
           </tbody>
         </table>
       </div>
+      )}
     </div>
   );
 }
