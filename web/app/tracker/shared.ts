@@ -15,6 +15,7 @@ export type TrackedBet = {
   discord_username: string | null;
   stat_type:    string | null;  // 'home_runs' | 'hits' | 'total_bases' | 'batter_ks'
   line:         number | null;
+  side:         string | null;  // 'over' | 'under'
 };
 
 export const STAT_TYPE_LABEL: Record<string, string> = {

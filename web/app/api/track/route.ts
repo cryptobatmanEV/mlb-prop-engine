@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
     const {
       game_date, batter, player_name, team_abbr,
       adj_prob, tracked_odds, edge, stake_units,
-      stat_type, line,
+      stat_type, line, side,
     } = body;
 
     if (!game_date || batter == null || stake_units == null || stake_units <= 0) {
@@ -16,6 +16,7 @@ export async function POST(req: NextRequest) {
     }
     const statType = stat_type ?? 'home_runs';
     const betLine  = line ?? 0.5;
+    const betSide  = side ?? 'over';
 
     const sql = getDb();
 
@@ -39,6 +40,7 @@ export async function POST(req: NextRequest) {
         discord_username TEXT,
         stat_type    TEXT        DEFAULT 'home_runs',
         line         FLOAT       DEFAULT 0.5,
+        side         TEXT        DEFAULT 'over',
         UNIQUE (game_date, batter, stat_type, line)
       )
     `;
@@ -46,9 +48,14 @@ export async function POST(req: NextRequest) {
     await sql`ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS discord_username TEXT`;
     await sql`ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS stat_type TEXT DEFAULT 'home_runs'`;
     await sql`ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS line FLOAT DEFAULT 0.5`;
+    await sql`ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS side TEXT DEFAULT 'over'`;
     await sql`ALTER TABLE tracked_bets DROP CONSTRAINT IF EXISTS tracked_bets_date_batter_key`;
-    // Postgres has no "ADD CONSTRAINT IF NOT EXISTS" -- swallow the
-    // duplicate-object error (42710) once the constraint already exists.
+    // Postgres has no "ADD CONSTRAINT IF NOT EXISTS" -- swallow the error
+    // once the constraint (and its backing index) already exists. Postgres
+    // raises 42P07 (duplicate_table, for the auto-created backing index)
+    // here, not 42710 (duplicate_object) -- verified against the actual
+    // NeonDbError shape, not assumed, after this exact mismatch caused every
+    // single track request to 500 once the constraint existed.
     try {
       await sql`
         ALTER TABLE tracked_bets ADD CONSTRAINT tracked_bets_date_batter_stat_line_key
@@ -56,7 +63,7 @@ export async function POST(req: NextRequest) {
       `;
     } catch (err) {
       const code = (err as { code?: string })?.code;
-      if (code !== '42710') throw err;
+      if (code !== '42710' && code !== '42P07') throw err;
     }
 
     const identity = getVerifiedIdentity(req);
@@ -65,16 +72,17 @@ export async function POST(req: NextRequest) {
 
     const result = await sql`
       INSERT INTO tracked_bets
-        (game_date, batter, player_name, team_abbr, adj_prob, tracked_odds, edge, stake_units, settled, discord_user_id, discord_username, stat_type, line)
+        (game_date, batter, player_name, team_abbr, adj_prob, tracked_odds, edge, stake_units, settled, discord_user_id, discord_username, stat_type, line, side)
       VALUES
         (${game_date}, ${batter}, ${player_name ?? null}, ${team_abbr ?? null},
-         ${adj_prob ?? null}, ${tracked_odds ?? null}, ${edge ?? null}, ${stake_units}, false, ${discordUserId}, ${discordUsername}, ${statType}, ${betLine})
+         ${adj_prob ?? null}, ${tracked_odds ?? null}, ${edge ?? null}, ${stake_units}, false, ${discordUserId}, ${discordUsername}, ${statType}, ${betLine}, ${betSide})
       ON CONFLICT (game_date, batter, stat_type, line) DO UPDATE SET
         player_name      = EXCLUDED.player_name,
         adj_prob          = EXCLUDED.adj_prob,
         tracked_odds      = EXCLUDED.tracked_odds,
         edge              = EXCLUDED.edge,
         stake_units       = EXCLUDED.stake_units,
+        side              = EXCLUDED.side,
         hit_hr            = NULL,
         settled           = false,
         created_at        = NOW(),

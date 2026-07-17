@@ -73,6 +73,15 @@ input::placeholder { color: var(--ev-dim); opacity: 1; }
 
   /* AI Picks: single full-width column on mobile */
   .ai-picks-grid { grid-template-columns: 1fr !important; }
+
+  /* Batter Model prop-type tab bar (HOME RUNS | HITS | TOTAL BASES |
+     STRIKEOUTS): condensed padding/font so all 4 fit without wrapping or
+     forcing the page to scroll horizontally. */
+  .prop-type-tabs button {
+    padding: 6px 10px !important;
+    font-size: 9px !important;
+    letter-spacing: 1.2px !important;
+  }
 }
 
 /* Loading spinner */

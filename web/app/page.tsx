@@ -107,8 +107,8 @@ export default async function Home({
         `SELECT
            id, game_date, game_pk, batter, player_name, team_abbr, opp_team,
            bat_order, is_home, game_time, stadium, pitcher_name, p_throws,
-           adj_prob, primary_line, primary_has_line, primary_best_book, primary_best_odds, primary_edge,
-           secondary_line, secondary_has_line, secondary_best_book, secondary_best_odds, secondary_edge,
+           adj_prob, primary_line, primary_has_line, primary_side, primary_best_book, primary_best_odds, primary_edge,
+           secondary_line, secondary_has_line, secondary_side, secondary_best_book, secondary_best_odds, secondary_edge,
            book_markets,
            pred_${statPrefix} AS pred_stat,
            p_${statPrefix}_1plus AS p_stat_1plus,

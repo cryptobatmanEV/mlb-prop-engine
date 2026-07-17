@@ -81,6 +81,7 @@ MIGRATE_TRACKED_BETS = [
     # run() below to swallow the duplicate-constraint error on repeat runs.
     "ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS stat_type TEXT DEFAULT 'home_runs'",
     "ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS line FLOAT DEFAULT 0.5",
+    "ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS side TEXT DEFAULT 'over'",
     "ALTER TABLE tracked_bets DROP CONSTRAINT IF EXISTS tracked_bets_date_batter_key",
     "ALTER TABLE tracked_bets ADD CONSTRAINT tracked_bets_date_batter_stat_line_key "
     "UNIQUE (game_date, batter, stat_type, line)",

@@ -23,6 +23,7 @@ type Props = {
   trackedEdge: number | null;
   statType?:   StatType;  // defaults to 'home_runs' for the existing HR tab
   line?:       number;    // defaults to 0.5 (anytime HR is itself a 0.5-line market)
+  side?:       'over' | 'under';  // which side of the line was tracked; defaults to 'over'
   isTracked?:  boolean;
   authHeaders?: HeadersInit;
 };
@@ -42,7 +43,7 @@ const BTN: React.CSSProperties = {
 
 export default function TrackButton({
   gameDate, batter, playerName, teamAbbr, adjProb, trackedOdds, trackedEdge,
-  statType = 'home_runs', line = 0.5, isTracked, authHeaders,
+  statType = 'home_runs', line = 0.5, side = 'over', isTracked, authHeaders,
 }: Props) {
   const router = useRouter();
   const [phase,      setPhase]      = useState<Phase>(isTracked ? 'tracked' : 'idle');
@@ -73,6 +74,7 @@ export default function TrackButton({
       stake_units:  units,
       stat_type:    statType,
       line,
+      side,
     });
 
     // eslint-disable-next-line no-console

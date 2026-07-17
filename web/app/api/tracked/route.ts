@@ -30,6 +30,7 @@ export async function GET(req: Request) {
     await sql`ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS discord_username TEXT`;
     await sql`ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS stat_type TEXT DEFAULT 'home_runs'`;
     await sql`ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS line FLOAT DEFAULT 0.5`;
+    await sql`ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS side TEXT DEFAULT 'over'`;
 
     const identity = getVerifiedIdentity(req);
     const discordUserId = identity?.discordId ?? null;

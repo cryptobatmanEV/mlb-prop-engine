@@ -63,7 +63,7 @@ export default function BetsTable({ bets: initialBets }: { bets: TrackedBet[] })
       }}>
         <thead>
           <tr style={{ borderBottom: '1px solid var(--ev-border)' }}>
-            {(['DATE', 'PLAYER', 'TEAM', 'ODDS', 'STAKE', 'EDGE', 'P/L', 'RESULT'] as const).map(
+            {(['DATE', 'PLAYER', 'TEAM', 'LINE', 'ODDS', 'STAKE', 'EDGE', 'P/L', 'RESULT'] as const).map(
               (h, i) => (
                 <th key={h} style={{ ...TH, textAlign: i >= 3 ? 'right' : 'left' }}>{h}</th>
               )
@@ -84,6 +84,9 @@ export default function BetsTable({ bets: initialBets }: { bets: TrackedBet[] })
                 <td style={{ padding: '9px var(--cell-px)', color: 'var(--ev-dim)' }}>{fmtDate(bet.game_date)}</td>
                 <td style={{ padding: '9px var(--cell-px)', color: 'var(--ev-text)' }}>{bet.player_name}</td>
                 <td style={{ padding: '9px var(--cell-px)', color: 'var(--ev-muted)' }}>{bet.team_abbr}</td>
+                <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', color: 'var(--ev-dim)', fontSize: '10px' }}>
+                  {bet.line != null ? `${(bet.side ?? 'over') === 'under' ? 'U' : 'O'} ${bet.line}` : '—'}
+                </td>
                 <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', color: 'var(--ev-blue)' }}>
                   {fmtOdds(bet.tracked_odds)}
                 </td>

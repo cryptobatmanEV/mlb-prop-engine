@@ -71,7 +71,8 @@ def fetch_batter_props(date_str, market_key, valid_lines):
     Returns:
         events_for_matching  list[dict]
         all_lines_df         DataFrame -- player_name_raw, bookmaker, line,
-                                           odds_american, event_id, implied, name_norm
+                                           over_odds, under_odds, event_id,
+                                           over_implied, under_implied, name_norm
         credits_used, failed_count, credits_remaining
     """
     if not PARLAY_KEY:
@@ -136,8 +137,9 @@ def fetch_batter_props(date_str, market_key, valid_lines):
         line = row.get('line')
         if line is None or float(line) not in valid_lines:
             continue
-        over_price = row.get('over_price')
-        if over_price is None:
+        over_price  = row.get('over_price')
+        under_price = row.get('under_price')
+        if over_price is None and under_price is None:
             continue
         player = row.get('player', '')
         # Guard against milestone-style rows where 'player' holds a
@@ -146,11 +148,12 @@ def fetch_batter_props(date_str, market_key, valid_lines):
             continue
 
         prop_rows.append({
-            'player_name_raw': player,
-            'bookmaker':       row.get('bookmaker', ''),
-            'line':            float(line),
-            'odds_american':   int(over_price),
-            'event_id':        eid,
+            'player_name_raw':   player,
+            'bookmaker':         row.get('bookmaker', ''),
+            'line':              float(line),
+            'over_odds':         int(over_price) if over_price is not None else None,
+            'under_odds':        int(under_price) if under_price is not None else None,
+            'event_id':          eid,
         })
 
     events_for_matching = list(seen_events.values())
@@ -162,7 +165,8 @@ def fetch_batter_props(date_str, market_key, valid_lines):
         return events_for_matching, pd.DataFrame(), credits_used, failed_count, credits_remaining
 
     all_df = pd.DataFrame(prop_rows)
-    all_df['implied']   = all_df['odds_american'].apply(american_to_implied)
+    all_df['over_implied']  = all_df['over_odds'].apply(lambda o: american_to_implied(o) if pd.notna(o) else None)
+    all_df['under_implied'] = all_df['under_odds'].apply(lambda o: american_to_implied(o) if pd.notna(o) else None)
     all_df['name_norm'] = all_df['player_name_raw'].apply(norm_name)
 
     n_players = all_df['name_norm'].nunique()

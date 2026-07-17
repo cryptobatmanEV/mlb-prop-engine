@@ -82,6 +82,7 @@ def _ddl(table, stat_prefix):
 
         primary_line            FLOAT,
         primary_has_line        BOOLEAN,
+        primary_side            TEXT,
         primary_best_book       TEXT,
         primary_best_odds       INTEGER,
         primary_book_implied    FLOAT,
@@ -89,6 +90,7 @@ def _ddl(table, stat_prefix):
 
         secondary_line          FLOAT,
         secondary_has_line      BOOLEAN,
+        secondary_side          TEXT,
         secondary_best_book     TEXT,
         secondary_best_odds     INTEGER,
         secondary_book_implied  FLOAT,
@@ -136,12 +138,17 @@ _ROW_COLS = [
     'game_date', 'game_pk', 'batter', 'player_name', 'team_abbr', 'opp_team',
     'bat_order', 'is_home', 'game_time', 'stadium', 'pitcher_name', 'p_throws',
     'pred_stat', 'p_stat_1plus', 'p_stat_2plus', 'adj_prob',
-    'primary_line', 'primary_has_line', 'primary_best_book', 'primary_best_odds',
+    'primary_line', 'primary_has_line', 'primary_side', 'primary_best_book', 'primary_best_odds',
     'primary_book_implied', 'primary_edge',
-    'secondary_line', 'secondary_has_line', 'secondary_best_book', 'secondary_best_odds',
+    'secondary_line', 'secondary_has_line', 'secondary_side', 'secondary_best_book', 'secondary_best_odds',
     'secondary_book_implied', 'secondary_edge',
     'pp_line', 'pp_side', 'edge_pp', 'ud_line', 'ud_side', 'edge_ud',
     'book_markets',
+]
+
+_MIGRATIONS = [
+    "ALTER TABLE {t} ADD COLUMN IF NOT EXISTS primary_side TEXT",
+    "ALTER TABLE {t} ADD COLUMN IF NOT EXISTS secondary_side TEXT",
 ]
 
 
@@ -185,6 +192,8 @@ def write_predictions(table, stat_prefix, rows):
             with conn.cursor() as cur:
                 cur.execute(_ddl(table, stat_prefix))
                 cur.execute(_AI_PICKS_DDL.format(table=ai_picks_table))
+                for stmt in _MIGRATIONS:
+                    cur.execute(stmt.format(t=table))
 
                 game_date = rows[0]['game_date']
                 game_pks = list({int(r['game_pk']) for r in rows if r.get('game_pk') is not None})
@@ -206,8 +215,9 @@ def write_predictions(table, stat_prefix, rows):
                         elif c in ('batter', 'game_pk', 'bat_order', 'primary_best_odds', 'secondary_best_odds'):
                             params[c] = _int(v)
                         elif c in ('player_name', 'team_abbr', 'opp_team', 'is_home', 'game_time',
-                                   'stadium', 'pitcher_name', 'p_throws', 'primary_best_book',
-                                   'secondary_best_book', 'pp_side', 'ud_side', 'book_markets', 'game_date'):
+                                   'stadium', 'pitcher_name', 'p_throws', 'primary_side', 'primary_best_book',
+                                   'secondary_side', 'secondary_best_book', 'pp_side', 'ud_side',
+                                   'book_markets', 'game_date'):
                             params[c] = _str(v)
                         else:
                             params[c] = _clean(v)

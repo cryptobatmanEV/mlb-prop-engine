@@ -17,19 +17,11 @@ type TrackerStats = {
   total_profit:   number;
 };
 
-type AiPicksStats = {
-  total_picks:   number;
-  settled_picks: number;
-  hits:          number;
-  total_profit:  number;
-};
-
 type TrackerData = {
   tracker:     TrackerStats;
   bets:        TrackedBet[];
   plData:      PLPoint[];
   calibData:   CalibPoint[];
-  aiPicks:     AiPicksStats;
   byStatType:  Record<string, TrackerStats>;
 };
 
@@ -163,7 +155,6 @@ export default function TrackerClient() {
   const allBets     = data?.bets ?? [];
   const plData      = data?.plData ?? [];
   const calibData   = data?.calibData ?? [];
-  const aiPicks     = data?.aiPicks ?? null;
   const byStatType  = data?.byStatType ?? {};
 
   // ALL uses the combined `tracker` stats; a specific filter uses its
@@ -180,14 +171,14 @@ export default function TrackerClient() {
   const winRate     = settledBets > 0 ? (wins / settledBets * 100).toFixed(1) + '%' : '—';
 
   const filterTabs = (
-    <div style={{ display: 'flex', width: 'fit-content', marginBottom: '16px', border: '1px solid var(--ev-border)', borderRadius: '2px', overflow: 'hidden', flexWrap: 'wrap' }}>
+    <div className="prop-type-tabs" style={{ display: 'flex', width: 'fit-content', maxWidth: '100%', overflowX: 'auto', marginBottom: '16px', border: '1px solid var(--ev-border)', borderRadius: '2px' }}>
       {STAT_FILTERS.map((f, idx) => (
         <button
           key={f}
           onClick={() => setStatFilter(f)}
           style={{
             fontFamily: 'var(--font-mono)', fontSize: '10px', letterSpacing: '2px',
-            border: 'none', cursor: 'pointer', padding: '7px 16px',
+            border: 'none', cursor: 'pointer', padding: '7px 16px', whiteSpace: 'nowrap', flexShrink: 0,
             color: statFilter === f ? 'var(--ev-text)' : 'var(--ev-dim)',
             background: statFilter === f ? 'rgba(255,255,255,0.07)' : 'transparent',
             borderRight: idx < STAT_FILTERS.length - 1 ? '1px solid var(--ev-border)' : 'none',
@@ -307,71 +298,6 @@ export default function TrackerClient() {
             {/* Bets table */}
             <BetsTable bets={bets} />
           </>
-        )}
-
-        {/* AI PICKS system performance */}
-        {aiPicks && aiPicks.settled_picks > 0 && (
-          <div style={{ marginTop: '24px' }}>
-            <div style={{ ...LABEL, letterSpacing: '3px', marginBottom: '12px' }}>
-              AI PICKS MODEL PERFORMANCE
-            </div>
-            <div style={{
-              display:             'grid',
-              gridTemplateColumns: 'repeat(4, 1fr)',
-              gap:                 '1px',
-              background:          'var(--ev-border)',
-              border:              '1px solid var(--ev-border)',
-              borderRadius:        '2px',
-              overflow:            'hidden',
-            }}>
-              {([
-                {
-                  label: 'PICKS LOGGED',
-                  value: String(aiPicks.total_picks),
-                  sub:   `${aiPicks.total_picks - aiPicks.settled_picks} PENDING`,
-                  color: 'var(--ev-text)',
-                },
-                {
-                  label: 'HIT RATE',
-                  value: aiPicks.settled_picks > 0
-                    ? `${(aiPicks.hits / aiPicks.settled_picks * 100).toFixed(1)}%`
-                    : '—',
-                  sub:   `${aiPicks.hits}W / ${aiPicks.settled_picks - aiPicks.hits}L`,
-                  color: 'var(--ev-text)',
-                },
-                {
-                  label: 'MODEL P/L',
-                  value: `${aiPicks.total_profit >= 0 ? '+' : ''}${aiPicks.total_profit.toFixed(1)}u`,
-                  sub:   `${aiPicks.settled_picks} SETTLED`,
-                  color: aiPicks.total_profit >= 0 ? 'var(--ev-green)' : 'var(--ev-red)',
-                },
-                {
-                  label: 'MODEL ROI',
-                  value: aiPicks.settled_picks > 0
-                    ? `${(aiPicks.total_profit / aiPicks.settled_picks * 100) >= 0 ? '+' : ''}${(aiPicks.total_profit / aiPicks.settled_picks * 100).toFixed(1)}%`
-                    : '—',
-                  sub:   '1U PER PICK',
-                  color: aiPicks.total_profit >= 0 ? 'var(--ev-green)' : 'var(--ev-red)',
-                },
-              ] as { label: string; value: string; sub: string; color: string }[]).map(
-                ({ label, value, sub, color }) => (
-                  <div key={label} style={{ background: 'var(--ev-bg)', padding: '16px 18px' }}>
-                    <div style={LABEL}>{label}</div>
-                    <div style={{
-                      fontFamily: 'var(--font-syne)', fontWeight: 800,
-                      fontSize: '22px', color, margin: '8px 0 4px', letterSpacing: '-0.5px',
-                    }}>
-                      {value}
-                    </div>
-                    <div style={{ ...LABEL, fontSize: '9px' }}>{sub}</div>
-                  </div>
-                )
-              )}
-            </div>
-            <div style={{ ...LABEL, fontSize: '9px', color: 'rgba(255,255,255,0.25)', marginTop: '6px' }}>
-              FIRST MORNING ODDS SNAPSHOT PER PICK &nbsp;&middot;&nbsp; 1 UNIT FLAT STAKE &nbsp;&middot;&nbsp; ADJ% &gt; 12% &middot; EDGE &gt; −3% &middot; ODDS ≤ +500
-            </div>
-          </div>
         )}
 
         {/* Footer */}

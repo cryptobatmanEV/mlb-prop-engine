@@ -25,13 +25,14 @@ export default function PropTypeTabs({ active }: { active: StatType }) {
   }
 
   return (
-    <div style={{
+    <div className="prop-type-tabs" style={{
       display:      'flex',
       width:        'fit-content',
+      maxWidth:     '100%',
+      overflowX:    'auto',
       marginBottom: '16px',
       border:       '1px solid var(--ev-border)',
       borderRadius: '2px',
-      overflow:     'hidden',
     }}>
       {TABS.map(({ id, label }, idx) => (
         <button
@@ -44,6 +45,8 @@ export default function PropTypeTabs({ active }: { active: StatType }) {
             border:         'none',
             cursor:         'pointer',
             padding:        '7px 18px',
+            whiteSpace:     'nowrap',
+            flexShrink:     0,
             color:          active === id ? 'var(--ev-text)' : 'var(--ev-dim)',
             background:     active === id ? 'rgba(255,255,255,0.07)' : 'transparent',
             borderRight:    idx < TABS.length - 1 ? '1px solid var(--ev-border)' : 'none',

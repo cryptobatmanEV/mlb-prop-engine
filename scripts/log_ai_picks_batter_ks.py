@@ -54,7 +54,7 @@ def run(date_str=None):
             'team_abbr': _s(row.get('team_abbr')), 'bat_order': bat_order,
             'best_odds': _i(row.get('primary_best_odds')), 'best_book': _s(row.get('primary_best_book')),
             'edge': _f(row.get('primary_edge')), 'adj_prob': adj_prob,
-            'book_line': _f(row.get('primary_line')), 'book_side': 'over',
+            'book_line': _f(row.get('primary_line')), 'book_side': _s(row.get('primary_side')) or 'over',
             'composite_score': float(score),
         })
 

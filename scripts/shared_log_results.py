@@ -94,10 +94,15 @@ def _ensure_tracked_bets_columns(cur):
     --log-only mode never touches those routes, so apply it here too."""
     cur.execute("ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS stat_type TEXT DEFAULT 'home_runs'")
     cur.execute("ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS line FLOAT DEFAULT 0.5")
+    cur.execute("ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS side TEXT DEFAULT 'over'")
 
 
 def backfill_tracked_bets(stat_type, date_str, actual_by_batter):
-    """Grade each pending tracked bet against the SPECIFIC line it was tracked at."""
+    """
+    Grade each pending tracked bet against the SPECIFIC line AND side it was
+    tracked at -- a bet on the under side wins when actual < line, not > line
+    (the model can favor either side per player; see predict/shared_fair_odds.py).
+    """
     if not DATABASE_URL or not actual_by_batter:
         return
     conn = psycopg2.connect(DATABASE_URL)
@@ -109,13 +114,13 @@ def backfill_tracked_bets(stat_type, date_str, actual_by_batter):
                 for batter_id, actual in actual_by_batter.items():
                     cur.execute(
                         """
-                        SELECT id, line FROM tracked_bets
+                        SELECT id, line, COALESCE(side, 'over') FROM tracked_bets
                          WHERE game_date = %s AND batter = %s AND stat_type = %s AND hit_hr IS NULL
                         """,
                         (date_str, batter_id, stat_type),
                     )
-                    for bet_id, line in cur.fetchall():
-                        won = actual > float(line)
+                    for bet_id, line, side in cur.fetchall():
+                        won = actual < float(line) if side == 'under' else actual > float(line)
                         cur.execute(
                             "UPDATE tracked_bets SET hit_hr = %s, settled = true WHERE id = %s",
                             (won, bet_id),
@@ -131,11 +136,11 @@ def backfill_tracked_bets(stat_type, date_str, actual_by_batter):
 
 def grade_ai_picks_log(ai_picks_table, date_str, actual_by_batter):
     """
-    Grades each row against its OWN book_line column, not a single line
-    passed in from the caller -- different models qualify AI Picks against
-    different lines (e.g. Total Bases uses its secondary/1.5 line, Hits and
-    Batter Ks use their primary/0.5 line), and book_line already records
-    which one each row actually qualified at.
+    Grades each row against its OWN book_line AND book_side columns, not a
+    single line/side passed in from the caller -- different models qualify
+    AI Picks against different lines (e.g. Total Bases uses its secondary/1.5
+    line, Hits and Batter Ks use their primary/0.5 line), and a pick's side
+    can be 'under' if that's what the model favored for that specific player.
     """
     if not DATABASE_URL or not actual_by_batter:
         return
@@ -149,10 +154,15 @@ def grade_ai_picks_log(ai_picks_table, date_str, actual_by_batter):
                         f"""
                         UPDATE {ai_picks_table}
                            SET actual_result = %s,
-                               result = CASE WHEN %s > COALESCE(book_line, 0.5) THEN 'HIT' ELSE 'MISS' END
+                               result = CASE
+                                 WHEN book_side = 'under' THEN
+                                   CASE WHEN %s < COALESCE(book_line, 0.5) THEN 'HIT' ELSE 'MISS' END
+                                 ELSE
+                                   CASE WHEN %s > COALESCE(book_line, 0.5) THEN 'HIT' ELSE 'MISS' END
+                               END
                          WHERE game_date = %s AND batter = %s AND result IS NULL
                         """,
-                        (actual, actual, date_str, batter_id),
+                        (actual, actual, actual, date_str, batter_id),
                     )
                     updated += cur.rowcount
         if updated:

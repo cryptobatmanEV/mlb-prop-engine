@@ -14,32 +14,6 @@ export async function GET(req: Request) {
   try {
     const sql = getDb();
 
-    // Ensure hr_ai_picks_log exists before querying it
-    await sql`
-      CREATE TABLE IF NOT EXISTS hr_ai_picks_log (
-        id              SERIAL PRIMARY KEY,
-        game_date       DATE        NOT NULL,
-        captured_at     TIMESTAMPTZ NOT NULL,
-        batter          BIGINT      NOT NULL,
-        player_name     TEXT,
-        team            TEXT,
-        best_odds       INTEGER,
-        best_book       TEXT,
-        edge            NUMERIC,
-        adj_prob        NUMERIC,
-        fair_odds       NUMERIC,
-        model_prob      NUMERIC,
-        barrel_pct      NUMERIC,
-        hard_hit_pct    NUMERIC,
-        hr_park_factor  NUMERIC,
-        batting_order   INTEGER,
-        szn_hr          INTEGER,
-        composite_score NUMERIC,
-        actual_hr       INTEGER,
-        result          TEXT
-      )
-    `;
-
     await sql`ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS discord_user_id TEXT`;
     await sql`ALTER TABLE tracked_bets ADD COLUMN IF NOT EXISTS discord_username TEXT`;
 
@@ -140,32 +114,7 @@ export async function GET(req: Request) {
       }];
     });
 
-    // AI PICKS system-wide performance — first snapshot per player per day
-    const aiPicksRaw = (await sql`
-      WITH first_snap AS (
-        SELECT DISTINCT ON (game_date, batter)
-          game_date,
-          best_odds,
-          result
-        FROM hr_ai_picks_log
-        ORDER BY game_date, batter, captured_at ASC
-      )
-      SELECT
-        COUNT(*)::int                                           AS total_picks,
-        COUNT(*) FILTER (WHERE result IS NOT NULL)::int         AS settled_picks,
-        COUNT(*) FILTER (WHERE result = 'HIT')::int             AS hits,
-        COALESCE(SUM(CASE
-          WHEN result = 'HIT' AND best_odds >  0 THEN best_odds::float / 100.0
-          WHEN result = 'HIT' AND best_odds <= 0 THEN 100.0 / ABS(best_odds::float)
-          WHEN result = 'MISS'                    THEN -1.0
-          ELSE 0
-        END), 0)::float AS total_profit
-      FROM first_snap
-    `) as { total_picks: number; settled_picks: number; hits: number; total_profit: number }[];
-
-    const aiPicks = aiPicksRaw[0] ?? { total_picks: 0, settled_picks: 0, hits: 0, total_profit: 0 };
-
-    return NextResponse.json({ tracker, bets, plData, calibData, aiPicks, byStatType });
+    return NextResponse.json({ tracker, bets, plData, calibData, byStatType });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('[tracker-data] DB error:', message);
