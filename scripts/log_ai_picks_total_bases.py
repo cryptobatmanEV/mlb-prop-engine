@@ -4,13 +4,14 @@ AI PICKS for the Total Bases model.
 Qualification: P(2+ TB) > 0.55, best_odds <= +300, bat_order <= 6.
 Composite score: p_tb_2plus*5 + (xslg_15-0.400)*4 + (barrel_pct_15-0.08)*3 + bat_order_bonus
 
-NOTE: the qualifying/scored probability is p_tb_2plus (the secondary line),
-not p_tb_1plus. Real ParlayAPI Total Bases lines are dominated by 0.5 (see
-predict/shared_parlay.py notes) where P(1+ TB) is almost always well above
-55% for any real player -- using it as the AI Picks threshold wouldn't be a
-meaningful filter. P(2+ TB) > 55% is the selective, "genuinely a good pick"
-signal the spec's "(1.5+ TB)" framing describes, so book_line/best_odds/
-best_book/edge are all taken from the SECONDARY line.
+NOTE: the qualifying/scored probability is p_tb_2plus, which is the PRIMARY
+line here (1.5), not p_tb_1plus (0.5) -- see predict/batter_props_fair_odds.py's
+LINE_ORDER: real ParlayAPI Total Bases coverage is dominated by the 1.5 line
+(~70%+ of players), while 0.5 is rarely offered (~35%), the reverse of Hits/
+Batter Ks. P(1+ TB) is almost always well above 55% for any real player, so
+using it as the AI Picks threshold wouldn't be a meaningful filter -- P(2+ TB)
+> 55% is the selective, "genuinely a good pick" signal the spec's "(1.5+ TB)"
+framing describes.
 
 Usage:
     python scripts/log_ai_picks_total_bases.py              # today
@@ -46,7 +47,7 @@ def run(date_str=None):
     picks = []
     for _, row in df.iterrows():
         adj_prob = _f(row.get('p_tb_2plus'))
-        best_odds = _i(row.get('secondary_best_odds'))
+        best_odds = _i(row.get('primary_best_odds'))
         bat_order = _i(row.get('bat_order'))
 
         if adj_prob is None or adj_prob <= MIN_ADJ_PROB:
@@ -67,9 +68,9 @@ def run(date_str=None):
             'game_date': date_str, 'captured_at': captured_at,
             'batter': int(row['batter']), 'player_name': _s(row.get('player_name')),
             'team_abbr': _s(row.get('team_abbr')), 'bat_order': bat_order,
-            'best_odds': best_odds, 'best_book': _s(row.get('secondary_best_book')),
-            'edge': _f(row.get('secondary_edge')), 'adj_prob': adj_prob,
-            'book_line': _f(row.get('secondary_line')), 'book_side': _s(row.get('secondary_side')) or 'over',
+            'best_odds': best_odds, 'best_book': _s(row.get('primary_best_book')),
+            'edge': _f(row.get('primary_edge')), 'adj_prob': adj_prob,
+            'book_line': _f(row.get('primary_line')), 'book_side': _s(row.get('primary_side')) or 'over',
             'composite_score': float(score),
         })
 

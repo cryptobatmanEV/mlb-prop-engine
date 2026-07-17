@@ -35,6 +35,17 @@ MARKET_CONFIGS = {
     'batter_ks':   dict(market_key='player_strikeouts', table='batter_ks_predictions', stat_prefix='batter_ks'),
 }
 
+# Which line is "primary" (shown first, used for AI Picks/tracking) varies
+# by real market coverage, not just numeric order. Total Bases' 0.5 line is
+# barely offered by any book (~35% coverage); its 1.5 line is the actual
+# popular, well-covered market (~70%+ coverage) -- so 1.5 is primary here,
+# unlike Hits/Batter Ks where 0.5 genuinely is the dominant line.
+LINE_ORDER = {
+    'hits':        dict(primary=0.5, secondary=1.5),
+    'total_bases': dict(primary=1.5, secondary=0.5),
+    'batter_ks':   dict(primary=0.5, secondary=1.5),
+}
+
 
 def run(date_str=None):
     if date_str is None:
@@ -61,7 +72,16 @@ def run(date_str=None):
         events, all_df, used, failed, remaining = fetch_batter_props(
             date_str, mcfg['market_key'], {0.5, 1.5})
 
-        priced = join_odds(pred_df, all_df, c1, c2, primary_line=0.5, secondary_line=1.5)
+        order = LINE_ORDER[model_key]
+        # prob_col_primary/secondary must match whichever line (0.5 -> c1,
+        # 1.5 -> c2) is designated primary/secondary for this model.
+        prob_for_line = {0.5: c1, 1.5: c2}
+        priced = join_odds(
+            pred_df, all_df,
+            prob_col_primary=prob_for_line[order['primary']],
+            prob_col_secondary=prob_for_line[order['secondary']],
+            primary_line=order['primary'], secondary_line=order['secondary'],
+        )
 
         out_path = os.path.join(OUT_DIR, f'{model_key}_fair_odds_{date_str}.csv')
         priced.to_csv(out_path, index=False)

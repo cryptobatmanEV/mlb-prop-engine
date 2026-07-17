@@ -90,24 +90,24 @@ def build_book_markets(all_df):
 
 def _pick_side_for_row(row, prefix, prob_col):
     """
-    Choose which side (over/under) to surface for this player/line: whichever
-    the model's own probability favors (>= 50% -> over, < 50% -> under),
-    falling back to whatever side actually has a posted price if the
-    favored side's price is missing.
+    Always surface the OVER side -- matches the convention every prop tool
+    (PrizePicks, Underdog, sportsbook prop pages) uses: a prop always means
+    "will they clear the over," regardless of which side is statistically
+    more likely on a given fixed line. This matters concretely for Total
+    Bases: real books also price "under 1.5" as the favored side for most
+    players (verified against real over/under prices -- clearing 2+ total
+    bases in a single game is genuinely a sub-50% event for a typical
+    player), but showing that as a shifting "favored side" per player was
+    confusing, not more correct, for a props-browsing tool. Falls back to
+    under only on the rare row where a book posts under but never over for
+    that specific line/player.
     """
-    prob = row.get(prob_col)
-    favored = 'over' if (prob is None or prob >= 0.5) else 'under'
-
     over_odds  = row.get(f'_{prefix}_over_odds')
     under_odds = row.get(f'_{prefix}_under_odds')
     has_over  = pd.notna(over_odds)
     has_under = pd.notna(under_odds)
 
-    if favored == 'over' and has_over:
-        side = 'over'
-    elif favored == 'under' and has_under:
-        side = 'under'
-    elif has_over:
+    if has_over:
         side = 'over'
     elif has_under:
         side = 'under'
