@@ -1,9 +1,9 @@
 {
   "target_hit_1plus": {
-    "brier": 0.2361821970080683,
-    "log_loss": 0.6649301400664877,
-    "mae": 0.4715816043784956,
-    "auc": 0.6171690096066523,
+    "brier": 0.23587468389461216,
+    "log_loss": 0.6643025193220613,
+    "mae": 0.4710916307281835,
+    "auc": 0.6200621869081387,
     "features": [
       "batting_avg_15",
       "obp_15",
@@ -17,6 +17,8 @@
       "batting_avg_vs_R_15",
       "batting_avg_vs_L_15",
       "batting_avg_last_5",
+      "k_rate_last_5",
+      "xba_last_5",
       "p_hits_per9_10",
       "p_babip_allowed_10",
       "p_contact_rate_allowed_10",
@@ -27,16 +29,18 @@
       "opp_k_pct_15",
       "stand_R",
       "p_throws_R",
-      "is_dome"
+      "is_dome",
+      "wind_out",
+      "hit_factor"
     ],
     "promoted": true,
     "prev_auc": null
   },
   "target_hit_2plus": {
-    "brier": 0.1419717109189462,
-    "log_loss": 0.45092405360042426,
-    "mae": 0.28713867673340193,
-    "auc": 0.6321469299056188,
+    "brier": 0.14178020086418025,
+    "log_loss": 0.45029361161584824,
+    "mae": 0.28678855557128163,
+    "auc": 0.634822580177315,
     "features": [
       "batting_avg_15",
       "obp_15",
@@ -50,6 +54,8 @@
       "batting_avg_vs_R_15",
       "batting_avg_vs_L_15",
       "batting_avg_last_5",
+      "k_rate_last_5",
+      "xba_last_5",
       "p_hits_per9_10",
       "p_babip_allowed_10",
       "p_contact_rate_allowed_10",
@@ -58,7 +64,8 @@
       "bat_order",
       "opp_k_pct_15",
       "stand_R",
-      "p_throws_R"
+      "p_throws_R",
+      "hit_factor"
     ],
     "promoted": true,
     "prev_auc": null

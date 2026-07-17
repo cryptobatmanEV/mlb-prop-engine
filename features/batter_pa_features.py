@@ -133,8 +133,12 @@ def build():
         sub['xslg_15']           = r['avg_xslg'].mean()
 
         # Short "hot streak" window -- captures recent form better than L15.
+        # Only applied to the stats where momentum matters most (batting
+        # average, K rate, xBA, xSLG), not every L15 feature.
         r5 = sub.shift(1).rolling(W5, min_periods=MIN_PERIODS_5)
         sub['batting_avg_last_5'] = r5['h'].sum() / r5['ab'].sum()
+        sub['k_rate_last_5']      = r5['k'].sum() / r5['pa'].sum()
+        sub['xba_last_5']         = r5['avg_xba'].mean()
         sub['xslg_last_5']        = r5['avg_xslg'].mean()
 
         out.append(sub)

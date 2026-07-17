@@ -23,6 +23,10 @@ Output: data/processed/batter_props_training_dataset.parquet
 import pandas as pd
 import numpy as np
 import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from features.park_factors_constants import PARK_FACTORS, DEFAULT_FACTOR
 
 STORE        = 'data/raw/statcast_batted_balls.parquet'
 BATTER       = 'data/processed/batter_pa_features.parquet'
@@ -30,7 +34,6 @@ PITCHER      = 'data/processed/pitcher_pa_features.parquet'
 PITCHER_LOG  = 'data/processed/pitcher_game_log_features.parquet'
 PLATOON      = 'data/processed/batter_platoon_pa_features.parquet'
 WEATHER      = 'data/processed/weather.parquet'
-PARK_TB      = 'data/processed/park_tb_factor.csv'
 OUT          = 'data/processed/batter_props_training_dataset.parquet'
 
 
@@ -135,28 +138,33 @@ def build():
                  'p_k_per9_10', 'p_k_rate_10']
     df = df.merge(pitcher_log[plog_cols], on=['pitcher', 'game_pk'], how='left')
 
-    print("Joining weather (is_dome, wind_out) and TB park factor...")
+    print("Joining weather (is_dome, wind_out) and static park factors...")
     if os.path.exists(WEATHER):
         weather = pd.read_parquet(WEATHER)
         weather['game_date'] = pd.to_datetime(weather['game_date'])
-        df = df.merge(weather[['game_date', 'home_team', 'wind_favor', 'is_dome']],
+        df = df.merge(weather[['game_date', 'home_team', 'wind_speed', 'wind_favor', 'is_dome']],
                       on=['game_date', 'home_team'], how='left')
-        # wind_out: wind blowing out toward the outfield by a meaningful margin
-        # (matches the ">= 0.3 of wind_speed toward OF" threshold used for the
-        # HR model's wind_description labeling in predict/daily_runner.py).
-        df['wind_out'] = (df['wind_favor'] >= 3).astype(int)
-        df = df.drop(columns=['wind_favor'])
+        # wind_out: wind blowing out toward the outfield (favor is at least
+        # half of total wind speed, i.e. mostly an OF-directed component --
+        # same ratio daily_runner.py's wind_description() uses to label a
+        # game "TOWARD OF") AND that wind has to actually be blowing hard
+        # enough to matter (> 8 mph), not just a light breeze that happens
+        # to point outward.
+        wind_ratio = df['wind_favor'] / df['wind_speed'].replace(0, np.nan)
+        df['wind_out'] = ((wind_ratio >= 0.5) & (df['wind_speed'] > 8)).fillna(False).astype(int)
+        df = df.drop(columns=['wind_speed', 'wind_favor'])
     else:
         print("  WARNING: weather.parquet not found -- skipping is_dome/wind_out.")
         df['is_dome'] = np.nan
         df['wind_out'] = np.nan
 
-    if os.path.exists(PARK_TB):
-        park_tb = pd.read_csv(PARK_TB)[['park', 'tb_park_factor']]
-        df = df.merge(park_tb, left_on='home_team', right_on='park', how='left').drop(columns=['park'])
-    else:
-        print("  WARNING: park_tb_factor.csv not found -- skipping tb_park_factor.")
-        df['tb_park_factor'] = np.nan
+    park_df = pd.DataFrame([
+        {'park': p, **f} for p, f in PARK_FACTORS.items()
+    ])
+    df = df.merge(park_df, left_on='home_team', right_on='park', how='left').drop(columns=['park'])
+    df['hit_factor'] = df['hit_factor'].fillna(DEFAULT_FACTOR['hit_factor'])
+    df['tb_factor']  = df['tb_factor'].fillna(DEFAULT_FACTOR['tb_factor'])
+    df['hr_factor']  = df['hr_factor'].fillna(DEFAULT_FACTOR['hr_factor'])
 
     # p_throws (pitcher handedness) already came in via pitcher[pcols] above
     # (pitcher_pa_features.parquet groups by p_throws).
@@ -180,7 +188,9 @@ def build():
     print(f"batting_avg_last_5 coverage: {df['batting_avg_last_5'].notna().mean():.1%}")
     print(f"batting_avg_vs_R_15/vs_L_15 coverage: {df['batting_avg_vs_R_15'].notna().mean():.1%} / {df['batting_avg_vs_L_15'].notna().mean():.1%}")
     print(f"is_dome coverage: {df['is_dome'].notna().mean():.1%}")
-    print(f"tb_park_factor coverage: {df['tb_park_factor'].notna().mean():.1%}")
+    print(f"wind_out rate: {df['wind_out'].mean():.1%}")
+    print(f"hit_factor/tb_factor/hr_factor coverage: {df['hit_factor'].notna().mean():.1%} / {df['tb_factor'].notna().mean():.1%} / {df['hr_factor'].notna().mean():.1%}")
+    print(f"k_rate_last_5/xba_last_5 coverage: {df['k_rate_last_5'].notna().mean():.1%} / {df['xba_last_5'].notna().mean():.1%}")
 
 
 if __name__ == '__main__':

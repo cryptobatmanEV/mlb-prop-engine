@@ -107,6 +107,20 @@ type SortDir = 'asc' | 'desc';
 
 function fmtOdds(o: number | null): string { if (o == null) return '—'; return o > 0 ? `+${o}` : `${o}`; }
 function sideLabel(side: string | null | undefined): string { return (side ?? 'over') === 'under' ? 'U' : 'O'; }
+// p_stat_1plus/p_stat_2plus are always keyed to the 0.5-line / 1.5-line
+// probability respectively (see predict/batter_props_fair_odds.py's
+// prob_for_line = {0.5: c1, 1.5: c2}) -- NOT to "primary"/"secondary", since
+// which line is primary varies by model (Total Bases' primary is 1.5, the
+// reverse of Hits/Batter Ks). Track/display code must look this up per-line
+// rather than assuming primary always means p_stat_1plus.
+function probForLine(row: PropRow, line: number | null): number | null {
+  if (line == null) return null;
+  return line >= 1 ? row.p_stat_2plus : row.p_stat_1plus;
+}
+function adjProbForSide(prob: number | null, side: string | null | undefined): number {
+  if (prob == null) return 0;
+  return sideLabel(side) === 'U' ? 1 - prob : prob;
+}
 function fmtProb(p: number | null): string { if (p == null || isNaN(p)) return '—'; return (p * 100).toFixed(1) + '%'; }
 function adjProbColor(p: number): string {
   if (p >= 0.55) return 'var(--ev-green)';
@@ -464,10 +478,26 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
                     </td>
                     <td style={{ padding: '9px var(--cell-px)', textAlign: 'right' }}>
                       {row.secondary_has_line ? (
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end' }}>
                           <BookLogo book={row.secondary_best_book} size={16} />
                           <span style={{ color: 'var(--ev-dim)', fontSize: '10px' }}>{sideLabel(row.secondary_side)}</span>
                           <span style={{ color: 'var(--ev-blue)', fontWeight: 600, fontSize: '12px' }}>{fmtOdds(row.secondary_best_odds)}</span>
+                          <span onClick={e => e.stopPropagation()}>
+                            <TrackButton
+                              gameDate={toISODate(row.game_date)}
+                              batter={row.batter}
+                              playerName={row.player_name}
+                              teamAbbr={row.team_abbr}
+                              adjProb={adjProbForSide(probForLine(row, row.secondary_line), row.secondary_side)}
+                              trackedOdds={row.secondary_best_odds}
+                              trackedEdge={row.secondary_edge}
+                              statType={config.statType}
+                              line={row.secondary_line ?? 1.5}
+                              side={(row.secondary_side as 'over' | 'under' | undefined) ?? 'over'}
+                              isTracked={trackedSet.has(trackedKey(toISODate(row.game_date), row.batter, config.statType, row.secondary_line ?? 1.5))}
+                              authHeaders={authHeaders}
+                            />
+                          </span>
                         </div>
                       ) : <span style={{ color: 'var(--ev-dim)', fontSize: '11px' }}>—</span>}
                     </td>
@@ -478,7 +508,7 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
                         batter={row.batter}
                         playerName={row.player_name}
                         teamAbbr={row.team_abbr}
-                        adjProb={sideLabel(row.primary_side) === 'U' ? 1 - (row.p_stat_1plus ?? 0) : (row.p_stat_1plus ?? 0)}
+                        adjProb={adjProbForSide(probForLine(row, row.primary_line), row.primary_side)}
                         trackedOdds={row.primary_best_odds}
                         trackedEdge={row.primary_edge}
                         statType={config.statType}
@@ -640,7 +670,7 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
                       batter={row.batter}
                       playerName={row.player_name}
                       teamAbbr={row.team_abbr}
-                      adjProb={sideLabel(row.primary_side) === 'U' ? 1 - (row.p_stat_1plus ?? 0) : (row.p_stat_1plus ?? 0)}
+                      adjProb={adjProbForSide(probForLine(row, row.primary_line), row.primary_side)}
                       trackedOdds={row.primary_best_odds}
                       trackedEdge={row.primary_edge}
                       statType={config.statType}
@@ -651,6 +681,33 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
                     />
                   </div>
                 </div>
+
+                {row.secondary_has_line && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingTop: '8px', marginTop: '2px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                    <div style={{ ...LABEL, fontSize: '9px' }}>{`BOOK (${row.secondary_line})`}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <BookLogo book={row.secondary_best_book} size={14} />
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--ev-dim)' }}>{sideLabel(row.secondary_side)}</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 600, color: 'var(--ev-blue)' }}>{fmtOdds(row.secondary_best_odds)}</span>
+                    </div>
+                    <div onClick={e => e.stopPropagation()} style={{ marginLeft: 'auto' }}>
+                      <TrackButton
+                        gameDate={toISODate(row.game_date)}
+                        batter={row.batter}
+                        playerName={row.player_name}
+                        teamAbbr={row.team_abbr}
+                        adjProb={adjProbForSide(probForLine(row, row.secondary_line), row.secondary_side)}
+                        trackedOdds={row.secondary_best_odds}
+                        trackedEdge={row.secondary_edge}
+                        statType={config.statType}
+                        line={row.secondary_line ?? 1.5}
+                        side={(row.secondary_side as 'over' | 'under' | undefined) ?? 'over'}
+                        isTracked={trackedSet.has(trackedKey(toISODate(row.game_date), row.batter, config.statType, row.secondary_line ?? 1.5))}
+                        authHeaders={authHeaders}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {isExpanded && (

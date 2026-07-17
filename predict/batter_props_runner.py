@@ -25,12 +25,12 @@ from predict.shared_mlb import (
 )
 from predict.daily_runner import get_todays_weather
 from features.build_batter_props_dataset import compute_team_k_rate, derive_team_and_bat_order
+from features.park_factors_constants import PARK_FACTORS, DEFAULT_FACTOR
 
 BATTER_PATH      = 'data/processed/batter_pa_features.parquet'
 PITCHER_PATH     = 'data/processed/pitcher_pa_features.parquet'
 PITCHER_LOG_PATH = 'data/processed/pitcher_game_log_features.parquet'
 PLATOON_PATH     = 'data/processed/batter_platoon_pa_features.parquet'
-PARK_TB_PATH     = 'data/processed/park_tb_factor.csv'
 STATCAST_PATH    = 'data/raw/statcast_batted_balls.parquet'
 OUT_DIR          = 'data/predictions'
 
@@ -46,17 +46,20 @@ MODEL_CONFIGS = {
             'batting_avg_15', 'obp_15', 'contact_rate_15', 'hard_hit_pct_15',
             'line_drive_pct_15', 'xba_15', 'babip_15', 'k_rate_15', 'gb_pct_15',
             'batting_avg_vs_R_15', 'batting_avg_vs_L_15', 'batting_avg_last_5',
+            'k_rate_last_5', 'xba_last_5',
             'p_hits_per9_10', 'p_babip_allowed_10', 'p_contact_rate_allowed_10',
             'p_k_rate_10', 'p_gb_pct_10',
-            'bat_order', 'is_home', 'opp_k_pct_15', 'stand_R', 'p_throws_R', 'is_dome',
+            'bat_order', 'is_home', 'opp_k_pct_15', 'stand_R', 'p_throws_R',
+            'is_dome', 'wind_out', 'hit_factor',
         ],
         secondary_features=[
             'batting_avg_15', 'obp_15', 'contact_rate_15', 'hard_hit_pct_15',
             'line_drive_pct_15', 'xba_15', 'babip_15', 'k_rate_15', 'gb_pct_15',
             'batting_avg_vs_R_15', 'batting_avg_vs_L_15', 'batting_avg_last_5',
+            'k_rate_last_5', 'xba_last_5',
             'p_hits_per9_10', 'p_babip_allowed_10', 'p_contact_rate_allowed_10',
             'p_k_rate_10', 'p_gb_pct_10',
-            'bat_order', 'opp_k_pct_15', 'stand_R', 'p_throws_R',
+            'bat_order', 'opp_k_pct_15', 'stand_R', 'p_throws_R', 'hit_factor',
         ],
         model_paths=('models/saved/hits_1plus_model.pkl', 'models/saved/hits_2plus_model.pkl'),
         prob_cols=('p_hit_1plus', 'p_hit_2plus'),
@@ -68,18 +71,18 @@ MODEL_CONFIGS = {
         primary_features=[
             'avg_total_bases_15', 'xslg_15', 'barrel_pct_15', 'hard_hit_pct_15',
             'fly_ball_pct_15', 'iso_15', 'xba_15', 'hr_rate_15', 'doubles_rate_15',
-            'slg_vs_R_15', 'slg_vs_L_15', 'xslg_last_5',
+            'slg_vs_R_15', 'slg_vs_L_15', 'xslg_last_5', 'xba_last_5',
             'p_slg_allowed_10', 'p_iso_allowed_10', 'p_barrel_pct_allowed_10',
             'p_fb_pct_10', 'p_hr_per9_10',
-            'bat_order', 'stand_R', 'p_throws_R', 'tb_park_factor',
+            'bat_order', 'stand_R', 'p_throws_R', 'tb_factor',
         ],
         secondary_features=[
             'avg_total_bases_15', 'xslg_15', 'barrel_pct_15', 'hard_hit_pct_15',
             'fly_ball_pct_15', 'iso_15', 'xba_15', 'hr_rate_15', 'doubles_rate_15',
-            'slg_vs_R_15', 'slg_vs_L_15', 'xslg_last_5',
+            'slg_vs_R_15', 'slg_vs_L_15', 'xslg_last_5', 'xba_last_5',
             'p_slg_allowed_10', 'p_iso_allowed_10', 'p_barrel_pct_allowed_10',
             'p_fb_pct_10', 'p_hr_per9_10',
-            'bat_order', 'is_home', 'stand_R', 'p_throws_R', 'tb_park_factor', 'wind_out',
+            'bat_order', 'is_home', 'stand_R', 'p_throws_R', 'tb_factor', 'wind_out',
         ],
         model_paths=('models/saved/total_bases_1plus_model.pkl', 'models/saved/total_bases_2plus_model.pkl'),
         prob_cols=('p_tb_1plus', 'p_tb_2plus'),
@@ -90,12 +93,12 @@ MODEL_CONFIGS = {
         label='Batter Ks',
         primary_features=[
             'k_rate_15', 'avg_k_per_game_15', 'k_rate_vs_R_15', 'k_rate_vs_L_15',
-            'p_k_per9_10', 'p_k_rate_10',
-            'bat_order', 'opp_k_pct_15', 'stand_R', 'p_throws_R',
+            'k_rate_last_5', 'p_k_per9_10', 'p_k_rate_10',
+            'bat_order', 'opp_k_pct_15', 'stand_R',
         ],
         secondary_features=[
             'k_rate_15', 'avg_k_per_game_15', 'k_rate_vs_R_15', 'k_rate_vs_L_15',
-            'p_k_per9_10', 'p_k_rate_10',
+            'k_rate_last_5', 'p_k_per9_10', 'p_k_rate_10',
             'bat_order', 'opp_k_pct_15', 'stand_R', 'p_throws_R',
         ],
         model_paths=('models/saved/batter_ks_1plus_model.pkl', 'models/saved/batter_ks_2plus_model.pkl'),
@@ -128,7 +131,7 @@ def latest_team_k_rate():
 
 
 def build_matchup_rows(games, rosters, lineups_by_game, batter_idx, pitcher_idx, team_k_idx,
-                        weather_idx, park_tb_idx, date_str):
+                        weather_idx, date_str):
     rows = []
     for game in games:
         home_abbr, away_abbr = game['home_abbr'], game['away_abbr']
@@ -137,13 +140,18 @@ def build_matchup_rows(games, rosters, lineups_by_game, batter_idx, pitcher_idx,
         starters = lineup_info.get('starters', set())
 
         is_dome = np.nan
-        wind_out = np.nan
+        wind_out = 0
         if home_abbr in weather_idx.index:
             w = weather_idx.loc[home_abbr]
             is_dome = int(w.get('is_dome', 0))
+            wind_speed = w.get('wind_speed', np.nan)
             wind_favor = w.get('wind_favor', np.nan)
-            wind_out = int(wind_favor >= 3) if pd.notna(wind_favor) else 0
-        tb_park_factor = park_tb_idx.get(home_abbr, np.nan)
+            # Same ratio-based "blowing out" test as build_batter_props_dataset.py:
+            # the OF-directed component has to be at least half of total wind
+            # speed, AND the wind has to be blowing hard enough to matter (>8mph).
+            if pd.notna(wind_speed) and wind_speed > 0 and pd.notna(wind_favor):
+                wind_out = int((wind_favor / wind_speed >= 0.5) and (wind_speed > 8))
+        park_factors = PARK_FACTORS.get(home_abbr, DEFAULT_FACTOR)
 
         sides = [
             dict(batters=rosters.get(game['home_id'], []), pitcher_id=game['away_pitcher_id'],
@@ -185,7 +193,10 @@ def build_matchup_rows(games, rosters, lineups_by_game, batter_idx, pitcher_idx,
                     # today's actual game), which broke already_logged()'s
                     # date dedup check in scripts/shared_log_results.py.
                     'game_date': date_str, 'game_pk': game['game_id'],
-                    'is_dome': is_dome, 'wind_out': wind_out, 'tb_park_factor': tb_park_factor,
+                    'is_dome': is_dome, 'wind_out': wind_out,
+                    'hit_factor': park_factors['hit_factor'],
+                    'tb_factor': park_factors['tb_factor'],
+                    'hr_factor': park_factors['hr_factor'],
                 }
                 for c in bf.index:
                     if c not in row:
@@ -224,10 +235,6 @@ def run(date_str=None):
     print("\nComputing latest team K rate context...")
     team_k_idx = latest_team_k_rate()
 
-    print("\nLoading TB park factors...")
-    park_tb_idx = (pd.read_csv(PARK_TB_PATH).set_index('park')['tb_park_factor']
-                   if os.path.exists(PARK_TB_PATH) else pd.Series(dtype=float))
-
     print(f"\nFetching schedule for {date_str}...")
     all_games = fetch_schedule(date_str)
     games = [g for g in all_games if g['status'] != 'Final']
@@ -258,7 +265,7 @@ def run(date_str=None):
     batter_idx = batter_feats.set_index('batter')
     pitcher_idx = pitcher_feats.set_index('pitcher')
     df = build_matchup_rows(games, rosters, lineups_by_game, batter_idx, pitcher_idx, team_k_idx,
-                            weather_idx, park_tb_idx, date_str)
+                            weather_idx, date_str)
     if df.empty:
         print("No rows assembled.")
         return {}
