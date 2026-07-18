@@ -544,13 +544,30 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
                     <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', fontWeight: 700, fontSize: '13px', color: adjProbColor(row.p_stat_1plus ?? 0) }}>{fmtProb(row.p_stat_1plus)}</td>
                     <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', color: 'var(--ev-muted)' }}>{fmtProb(row.p_stat_2plus)}</td>
                     <td style={{ padding: '9px var(--cell-px)', textAlign: 'right' }}>
-                      {row._primary.hasLine ? (
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end' }}>
-                          <BookLogo book={row._primary.book} size={16} />
-                          <span style={{ color: 'var(--ev-dim)', fontSize: '10px' }}>{sideLabel(primarySide)}</span>
-                          <span style={{ color: 'var(--ev-blue)', fontWeight: 600, fontSize: '12px' }}>{fmtOdds(row._primary.odds)}</span>
+                      <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          {row._primary.hasLine ? (
+                            <>
+                              <BookLogo book={row._primary.book} size={13} />
+                              <span style={{ color: 'var(--ev-dim)', fontSize: '9px' }}>{sideLabel(primarySide)} {row.primary_line}</span>
+                              <span style={{ color: 'var(--ev-blue)', fontWeight: 600, fontSize: '12px' }}>{fmtOdds(row._primary.odds)}</span>
+                            </>
+                          ) : (
+                            <span style={{ color: 'var(--ev-dim)', fontSize: '10px' }}>{row.primary_line} —</span>
+                          )}
                         </div>
-                      ) : <span style={{ color: 'var(--ev-dim)', fontSize: '11px' }}>—</span>}
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          {row._secondary.hasLine ? (
+                            <>
+                              <BookLogo book={row._secondary.book} size={13} />
+                              <span style={{ color: 'var(--ev-dim)', fontSize: '9px' }}>{sideLabel(secondarySide)} {row.secondary_line}</span>
+                              <span style={{ color: 'var(--ev-blue)', fontWeight: 600, fontSize: '12px' }}>{fmtOdds(row._secondary.odds)}</span>
+                            </>
+                          ) : (
+                            <span style={{ color: 'var(--ev-dim)', fontSize: '10px' }}>{row.secondary_line} —</span>
+                          )}
+                        </div>
+                      </div>
                     </td>
                     <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', color: edgeColor, fontWeight: edgeWeight }}>{edgeText}</td>
                     <td style={{ padding: '8px 10px', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
