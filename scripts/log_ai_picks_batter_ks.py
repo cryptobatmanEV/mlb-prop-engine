@@ -1,8 +1,11 @@
 """
 AI PICKS for the Batter Ks model.
 
-Qualification: P(0.5+ Ks) > 0.55. No odds restriction, no bat_order gate
-(matches the spec -- only Hits and Total Bases gate on bat_order/max odds).
+Qualification: P(0.5+ Ks) > 0.55, bat_order <= 8 (and not null -- confirmed
+starters only, matching Hits/Total Bases' lineup gate; previously this
+model had no bat_order gate at all, which let non-starters -- who may get
+0-1 PA -- flood the picks list since "will strike out at least once" is a
+low bar for almost any batter over a real game's worth of ABs).
 Composite score: adj_prob*5 + (k_rate_15-0.22)*4 + pitcher_k_bonus
   pitcher_k_bonus = (p_k_rate_10 - 0.22) * 3 -- analogous to the other two
   models' pitcher-allowed term; not otherwise specified by the spec.
@@ -23,6 +26,7 @@ from scripts.shared_ai_picks import bat_order_bonus, write_picks, now_utc, _f, _
 
 TABLE = 'batter_ks_ai_picks_log'
 MIN_ADJ_PROB = 0.55
+MAX_BAT_ORDER = 8
 
 
 def run(date_str=None):
@@ -43,6 +47,9 @@ def run(date_str=None):
             continue
 
         bat_order = _i(row.get('bat_order'))
+        if bat_order is None or bat_order > MAX_BAT_ORDER:
+            continue
+
         k_rate = _f(row.get('k_rate_15')) or 0.0
         p_k_rate = _f(row.get('p_k_rate_10')) or 0.0
         pitcher_k_bonus = (p_k_rate - 0.22) * 3

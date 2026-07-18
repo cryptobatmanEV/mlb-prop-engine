@@ -1,0 +1,93 @@
+name: Batter Props Weekly Retrain
+
+# Runs every Monday at 7:00 AM ET (11:00 UTC during EDT, April-October;
+# 6:00 AM ET during EST, Nov-Mar -- fine, offseason has no games).
+#
+# Deliberately scheduled an hour after weekly_retrain.yml (HR, 9:30 UTC) and
+# an hour after daily_pipeline.yml's 6:00 AM ET log-only run (10:00 UTC) --
+# both of those also commit + push to main, and HR's retrain job previously
+# lost a silent push race every Monday because it shared daily_pipeline's
+# exact cron time with no retry logic (see weekly_retrain.yml's comment).
+# This workflow's own push step also retries on rejection as defense in
+# depth, but the offset avoids the collision in the first place.
+on:
+  schedule:
+    - cron: '0 11 * * 1'
+  workflow_dispatch:   # manual trigger from the Actions tab
+
+permissions:
+  contents: write   # needed to commit the refreshed data and models back to the repo
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  retrain:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # 1. Pull any newly completed games since the last update. Shared with
+      #    weekly_retrain.yml / daily_pipeline.yml -- idempotent either way,
+      #    since it only ever pulls games after whatever's already in the store.
+      - name: Update Statcast data
+        run: python ingestion/update_statcast.py
+
+      # 2. Recompute rolling features and rebuild the joined training dataset
+      #    for the Hits / Total Bases / Batter Ks models from the refreshed
+      #    Statcast store (platoon splits, L5 windows, park factors, wind).
+      - name: Rebuild features and training dataset
+        run: |
+          python features/batter_pa_features.py
+          python features/pitcher_pa_features.py
+          python features/pitcher_game_log_features.py
+          python features/batter_platoon_pa_features.py
+          python features/build_batter_props_dataset.py
+
+      # 3. Retrain all 3 models (1+/2+ sub-models each). The shared trainer
+      #    (models/train_batter_props.py) only overwrites a saved model if
+      #    its AUC is >= the currently-deployed model's AUC.
+      - name: Retrain Hits / Total Bases / Batter Ks models
+        run: python models/train_all_batter_props.py
+
+      # 4. Commit the refreshed data/model files back to the repo.
+      - name: Commit and push updates
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/raw/statcast_batted_balls.parquet \
+                  data/processed/batter_pa_features.parquet \
+                  data/processed/pitcher_pa_features.parquet \
+                  data/processed/pitcher_game_log_features.parquet \
+                  data/processed/batter_platoon_pa_features.parquet \
+                  data/processed/batter_props_training_dataset.parquet \
+                  models/saved/hits_1plus_model.pkl \
+                  models/saved/hits_2plus_model.pkl \
+                  models/saved/hits_metrics.json \
+                  models/saved/total_bases_1plus_model.pkl \
+                  models/saved/total_bases_2plus_model.pkl \
+                  models/saved/total_bases_metrics.json \
+                  models/saved/batter_ks_1plus_model.pkl \
+                  models/saved/batter_ks_2plus_model.pkl \
+                  models/saved/batter_ks_metrics.json
+          git diff --cached --quiet && echo "Nothing to commit" && exit 0
+          git commit -m "Auto: batter props weekly retrain $(date -u +'%Y-%m-%d')"
+          for i in 1 2 3 4 5; do
+            git push && break
+            echo "Push rejected (attempt $i/5) -- rebasing onto origin/main and retrying..."
+            git fetch origin main
+            git rebase origin/main
+          done

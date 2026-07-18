@@ -48,6 +48,26 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # Refresh the raw Statcast store and the rolling feature parquets that
+      # predict/batter_props_runner.py (Hits/Total Bases/Batter Ks) actually
+      # reads. Without this, update_statcast.py's fetch only ever lived in
+      # the ephemeral runner filesystem for that one run -- the store and
+      # every feature file stayed frozen at whatever was last manually
+      # committed, no matter how many times this workflow ran per day.
+      # continue-on-error: true matches daily_pipeline.py's own "non-fatal"
+      # treatment of the Statcast update -- predictions should still run off
+      # yesterday's features rather than block entirely on a fetch hiccup.
+      # Skipped on the log-only run, which doesn't score any predictions.
+      - name: Update Statcast data and rebuild batter-props features
+        if: github.event.schedule != '0 10 * * *'
+        continue-on-error: true
+        run: |
+          python ingestion/update_statcast.py
+          python features/batter_pa_features.py
+          python features/pitcher_pa_features.py
+          python features/pitcher_game_log_features.py
+          python features/batter_platoon_pa_features.py
+
       # Log yesterday's actual results into Neon for all 4 models (HR, Hits,
       # Total Bases, Batter Ks). Reads yesterday's fair_odds CSVs (committed
       # by the previous pipeline run). Uses continue-on-error so a missing
@@ -70,13 +90,27 @@ jobs:
           ODDS_PROVIDER: parlay_api
         run: python scripts/daily_pipeline.py
 
-      # Commit the new fair_odds CSV and any results_log updates back to the repo.
-      # This is what makes tomorrow's log_results step able to read today's CSV.
+      # Commit the new fair_odds CSV, results_log updates, and the refreshed
+      # Statcast store/feature parquets back to the repo. This is what makes
+      # tomorrow's log_results step (and every later run's feature rebuild)
+      # actually start from today's data instead of resetting to whatever
+      # was last committed.
       - name: Commit pipeline outputs
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/outputs/ data/logs/ data/processed/vs_pitcher_cache.json 2>/dev/null || true
+          git add data/outputs/ data/logs/ data/processed/vs_pitcher_cache.json \
+                  data/raw/statcast_batted_balls.parquet \
+                  data/processed/batter_pa_features.parquet \
+                  data/processed/pitcher_pa_features.parquet \
+                  data/processed/pitcher_game_log_features.parquet \
+                  data/processed/batter_platoon_pa_features.parquet \
+                  2>/dev/null || true
           git diff --cached --quiet && echo "Nothing to commit" && exit 0
           git commit -m "Auto: pipeline $(date -u +'%Y-%m-%d %H:%M UTC')"
-          git push
+          for i in 1 2 3 4 5; do
+            git push && break
+            echo "Push rejected (attempt $i/5) -- rebasing onto origin/main and retrying..."
+            git fetch origin main
+            git rebase origin/main
+          done

@@ -1,11 +1,19 @@
 name: Weekly Model Retrain
 
-# Runs every Monday at 6 AM ET (10:00 UTC during EDT, April-October).
+# Runs every Monday at 5:30 AM ET (9:30 UTC during EDT, April-October).
 # Same convention as daily_pipeline.yml: no off-season adjustment, so this
-# becomes 5 AM ET during EST (Nov-Mar) — fine since the offseason has no games.
+# becomes 4:30 AM ET during EST (Nov-Mar) — fine since the offseason has no games.
+#
+# Deliberately offset 30 min before daily_pipeline.yml's 6:00 AM ET log-only
+# run (also every Monday, at 10:00 UTC): the two workflows both commit +
+# push to main, and with identical cron times they raced every Monday --
+# this retrain's push consistently lost (no retry logic), so nothing ever
+# landed even though the job itself succeeded. The commit step below also
+# now retries on push rejection as defense in depth, but staggering the
+# schedule avoids the collision in the first place.
 on:
   schedule:
-    - cron: '0 10 * * 1'
+    - cron: '30 9 * * 1'
   workflow_dispatch:   # manual trigger from the Actions tab
 
 permissions:
@@ -66,4 +74,9 @@ jobs:
                   models/saved/retrain_metrics.json
           git diff --cached --quiet && echo "Nothing to commit" && exit 0
           git commit -m "$(python scripts/format_retrain_commit.py)"
-          git push
+          for i in 1 2 3 4 5; do
+            git push && break
+            echo "Push rejected (attempt $i/5) -- rebasing onto origin/main and retrying..."
+            git fetch origin main
+            git rebase origin/main
+          done

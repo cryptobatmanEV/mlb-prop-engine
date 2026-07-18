@@ -26,6 +26,7 @@ from predict.shared_mlb import (
 from predict.daily_runner import get_todays_weather
 from features.build_batter_props_dataset import compute_team_k_rate, derive_team_and_bat_order
 from features.park_factors_constants import PARK_FACTORS, DEFAULT_FACTOR
+from ingestion.fetch_weather import STADIUMS
 
 BATTER_PATH      = 'data/processed/batter_pa_features.parquet'
 PITCHER_PATH     = 'data/processed/pitcher_pa_features.parquet'
@@ -236,7 +237,7 @@ def run(date_str=None):
     team_k_idx = latest_team_k_rate()
 
     print(f"\nFetching schedule for {date_str}...")
-    all_games = fetch_schedule(date_str)
+    all_games = fetch_schedule(date_str, stadiums=STADIUMS)
     games = [g for g in all_games if g['status'] != 'Final']
     if not games:
         print("No games today (or all final). Exiting.")
@@ -270,6 +271,29 @@ def run(date_str=None):
         print("No rows assembled.")
         return {}
     print(f"  {len(df)} batter-game rows")
+
+    # Hard lineup filter -- mirrors predict/fair_odds.py's apply_lineup_filter()
+    # for HR: only confirmed starters get scored/shown. Without this, bench
+    # players with no bat_order (out-of-distribution for the model, which
+    # never sees a NaN bat_order in training since it's derived from real
+    # completed games) get displayed with meaningless inflated probabilities.
+    scored_count = len(df)
+    dropped_df = df[df['bat_order'].isna()]
+    df = df[df['bat_order'].notna()].copy()
+    print(f"\n  {'-'*52}")
+    print(f"  LINEUP FILTER")
+    print(f"  Scored:  {scored_count:4d}  roster rows")
+    print(f"  Kept:    {len(df):4d}  confirmed starters")
+    print(f"  DROPPED: {len(dropped_df):4d}  bench / not in confirmed lineup")
+    print(f"  {'-'*52}")
+    if 0 < len(dropped_df) <= 20:
+        print(f"  Dropped: {sorted(dropped_df['player_name'].tolist())}")
+    elif len(dropped_df) > 20:
+        print(f"  Dropped (first 20 of {len(dropped_df)}): "
+              f"{sorted(dropped_df['player_name'].tolist())[:20]}")
+    if df.empty:
+        print("No confirmed starters found.")
+        return {}
 
     os.makedirs(OUT_DIR, exist_ok=True)
     results = {}

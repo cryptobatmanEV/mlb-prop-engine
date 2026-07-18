@@ -114,7 +114,7 @@ export default async function Home({
            p_${statPrefix}_1plus AS p_stat_1plus,
            p_${statPrefix}_2plus AS p_stat_2plus
          FROM ${table}
-         WHERE game_date = $1::date
+         WHERE game_date = $1::date AND bat_order IS NOT NULL
          ORDER BY adj_prob DESC`,
         [validDate],
       );
