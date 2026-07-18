@@ -416,7 +416,8 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
     { key: 'p_stat_1plus', label: config.prob1Label, align: 'right' },
     { key: 'p_stat_2plus', label: config.prob2Label, align: 'right' },
     { key: null, label: 'BOOK', align: 'right' },
-    { key: 'primary_edge', label: 'EDGE', align: 'right' },
+    { key: 'primary_edge', label: `EDGE (${rows[0]?.primary_line ?? '0.5'})`, align: 'right' },
+    { key: null, label: `EDGE (${rows[0]?.secondary_line ?? '1.5'})`, align: 'right' },
     { key: null, label: 'MY LINE', align: 'right' },
     { key: null, label: 'TRACK', align: 'right' },
   ];
@@ -511,6 +512,7 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
             {sorted.map(row => {
               const isExpanded = expanded === row.batter;
               const { text: edgeText, color: edgeColor, weight: edgeWeight } = edgeDisplay(row._primary.edge, row._primary.hasLine);
+              const { text: edge2Text, color: edge2Color, weight: edge2Weight } = edgeDisplay(row._secondary.edge, row._secondary.hasLine);
               const books = row._books;
               const primarySide = row._primary.side;
               const secondarySide = row._secondary.side;
@@ -570,6 +572,7 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
                       </div>
                     </td>
                     <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', color: edgeColor, fontWeight: edgeWeight }}>{edgeText}</td>
+                    <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', color: edge2Color, fontWeight: edge2Weight }}>{edge2Text}</td>
                     <td style={{ padding: '8px 10px', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
                       <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
                         <input
@@ -725,6 +728,7 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
         {sorted.map(row => {
           const isExpanded = expanded === row.batter;
           const { text: edgeText, color: edgeColor, weight: edgeWeight } = edgeDisplay(row._primary.edge, row._primary.hasLine);
+          const { text: edge2Text, color: edge2Color, weight: edge2Weight } = edgeDisplay(row._secondary.edge, row._secondary.hasLine);
           const books = row._books;
           const primarySide = row._primary.side;
           const secondarySide = row._secondary.side;
@@ -839,6 +843,7 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
                       <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--ev-dim)' }}>{sideLabel(secondarySide)}</span>
                       <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 600, color: 'var(--ev-blue)' }}>{fmtOdds(row._secondary.odds)}</span>
                     </div>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: edge2Color, fontWeight: edge2Weight }}>{edge2Text}</span>
                     <div onClick={e => e.stopPropagation()} style={{ marginLeft: 'auto' }}>
                       <TrackButton
                         gameDate={toISODate(row.game_date)}
