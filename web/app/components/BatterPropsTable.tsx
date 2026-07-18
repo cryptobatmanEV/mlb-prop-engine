@@ -100,8 +100,6 @@ export type AiPickRow = {
   result: string | null;  // 'HIT' | 'MISS' | null (pending)
 };
 
-function fmtProj(v: number | null): string { return v == null ? '—' : v.toFixed(2); }
-
 type SortKey = 'player_name' | 'p_stat_1plus' | 'p_stat_2plus' | 'primary_edge';
 type SortDir = 'asc' | 'desc';
 
@@ -121,6 +119,72 @@ function adjProbForSide(prob: number | null, side: string | null | undefined): n
   if (prob == null) return 0;
   return sideLabel(side) === 'U' ? 1 - prob : prob;
 }
+
+// ── Client-side favored-side odds (over/under) ──────────────────────────────
+// predict/shared_fair_odds.py intentionally always writes 'over' as
+// primary_side/secondary_side (a deliberate simplification -- see that
+// file's docstring). book_markets already carries BOTH over_price and
+// under_price per book/line, so "show whichever side the model actually
+// favors" can be computed entirely here from data already sent to the
+// browser, without touching the Python pipeline or regenerating any data.
+type BookMarkets = Record<string, Record<string, { over?: number; under?: number }>>;
+
+function parseBookMarkets(raw: string | null): BookMarkets {
+  if (!raw) return {};
+  try { return JSON.parse(raw); } catch { return {}; }
+}
+
+function impliedFromAmerican(o: number): number {
+  return o > 0 ? 100 / (o + 100) : Math.abs(o) / (Math.abs(o) + 100);
+}
+
+function bestOddsForSide(books: BookMarkets, line: number | null, side: 'over' | 'under'): { book: string | null; odds: number | null } {
+  if (line == null) return { book: null, odds: null };
+  let bestBook: string | null = null;
+  let bestOdds: number | null = null;
+  for (const [bk, lines] of Object.entries(books)) {
+    const o = lines[String(line)]?.[side];
+    if (o == null) continue;
+    if (bestOdds == null || o > bestOdds) { bestOdds = o; bestBook = bk; }
+  }
+  return { book: bestBook, odds: bestOdds };
+}
+
+function favoredSide(prob: number | null): 'over' | 'under' {
+  return (prob ?? 1) >= 0.5 ? 'over' : 'under';
+}
+
+type LineDisplay = { side: 'over' | 'under'; book: string | null; odds: number | null; hasLine: boolean; edge: number | null };
+
+function computeLineDisplay(books: BookMarkets, line: number | null, prob: number | null): LineDisplay {
+  let side = favoredSide(prob);
+  let { book, odds } = bestOddsForSide(books, line, side);
+  if (odds == null) {
+    // Rare case: the market only ever posted the other side for this
+    // player/line. Show what's actually available rather than a blank cell.
+    const otherSide = side === 'over' ? 'under' : 'over';
+    const fallback = bestOddsForSide(books, line, otherSide);
+    if (fallback.odds != null) { side = otherSide; book = fallback.book; odds = fallback.odds; }
+  }
+  const hasLine = odds != null;
+  let edge: number | null = null;
+  if (hasLine && prob != null) {
+    const sideProb = side === 'under' ? 1 - prob : prob;
+    edge = Math.round((sideProb - impliedFromAmerican(odds as number)) * 10000) / 10000;
+  }
+  return { side, book, odds, hasLine, edge };
+}
+
+// ── MY LINE (custom odds) ───────────────────────────────────────────────────
+function parseCustomOdds(raw: string): number | null {
+  const stripped = raw.trim().replace(/^\+/, '');
+  if (!stripped) return null;
+  const n = parseInt(stripped, 10);
+  if (isNaN(n)) return null;
+  if (n >= 100 || n <= -100) return n;
+  return null;
+}
+
 function fmtProb(p: number | null): string { if (p == null || isNaN(p)) return '—'; return (p * 100).toFixed(1) + '%'; }
 function adjProbColor(p: number): string {
   if (p >= 0.55) return 'var(--ev-green)';
@@ -272,6 +336,8 @@ function BatterAiPicks({ picks, config, gameDate, trackedSet, authHeaders }: {
   );
 }
 
+type EnrichedRow = PropRow & { _books: BookMarkets; _primary: LineDisplay; _secondary: LineDisplay };
+
 export default function BatterPropsTable({ rows, config, aiPicks }: { rows: PropRow[]; config: PropConfig; aiPicks: AiPickRow[] }) {
   const [sortKey, setSortKey]   = useState<SortKey>('p_stat_1plus');
   const [sortDir, setSortDir]   = useState<SortDir>('desc');
@@ -280,8 +346,16 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'edge' | 'ai'>('edge');
   const [trackedSet, setTrackedSet]   = useState<Set<string>>(new Set());
+  const [customOdds, setCustomOdds]   = useState<Record<number, string>>({});
   const identity    = useIframeIdentity();
   const authHeaders = identityHeaders(identity);
+
+  const enriched: EnrichedRow[] = useMemo(() => rows.map(row => {
+    const books = parseBookMarkets(row.book_markets);
+    const primary = computeLineDisplay(books, row.primary_line, probForLine(row, row.primary_line));
+    const secondary = computeLineDisplay(books, row.secondary_line, probForLine(row, row.secondary_line));
+    return { ...row, _books: books, _primary: primary, _secondary: secondary };
+  }), [rows]);
 
   useEffect(() => {
     if (identity === undefined) return;
@@ -301,25 +375,25 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
   }, [identity]);
 
   const searchFiltered = useMemo(() => {
-    if (!searchQuery.trim()) return rows;
+    if (!searchQuery.trim()) return enriched;
     const q = searchQuery.trim().toLowerCase();
-    return rows.filter(r => r.player_name.toLowerCase().includes(q) || r.team_abbr.toLowerCase().includes(q));
-  }, [rows, searchQuery]);
+    return enriched.filter(r => r.player_name.toLowerCase().includes(q) || r.team_abbr.toLowerCase().includes(q));
+  }, [enriched, searchQuery]);
 
   const evCount = useMemo(
-    () => searchFiltered.filter(r => r.primary_has_line && r.primary_edge != null && r.primary_edge > 0).length,
+    () => searchFiltered.filter(r => r._primary.hasLine && r._primary.edge != null && r._primary.edge > 0).length,
     [searchFiltered]
   );
 
   const filtered = useMemo(() => {
     if (!evOnly) return searchFiltered;
-    return searchFiltered.filter(r => r.primary_has_line && r.primary_edge != null && r.primary_edge > 0);
+    return searchFiltered.filter(r => r._primary.hasLine && r._primary.edge != null && r._primary.edge > 0);
   }, [searchFiltered, evOnly]);
 
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) => {
-      const av = a[sortKey] as string | number | null;
-      const bv = b[sortKey] as string | number | null;
+      const av = sortKey === 'primary_edge' ? a._primary.edge : (a[sortKey] as string | number | null);
+      const bv = sortKey === 'primary_edge' ? b._primary.edge : (b[sortKey] as string | number | null);
       if (av == null && bv == null) return 0;
       if (av == null) return 1;
       if (bv == null) return -1;
@@ -341,10 +415,9 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
     { key: null, label: 'VS', align: 'left' },
     { key: 'p_stat_1plus', label: config.prob1Label, align: 'right' },
     { key: 'p_stat_2plus', label: config.prob2Label, align: 'right' },
-    { key: null, label: config.projLabel, align: 'right' },
-    { key: null, label: `BOOK (${rows[0]?.primary_line ?? '0.5'})`, align: 'right' },
-    { key: null, label: `BOOK (${rows[0]?.secondary_line ?? '1.5'})`, align: 'right' },
+    { key: null, label: 'BOOK', align: 'right' },
     { key: 'primary_edge', label: 'EDGE', align: 'right' },
+    { key: null, label: 'MY LINE', align: 'right' },
     { key: null, label: 'TRACK', align: 'right' },
   ];
 
@@ -437,12 +510,16 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
           <tbody>
             {sorted.map(row => {
               const isExpanded = expanded === row.batter;
-              const { text: edgeText, color: edgeColor, weight: edgeWeight } = edgeDisplay(row.primary_edge, row.primary_has_line);
-              // book_markets shape: {"draftkings": {"0.5": {"over": -150, "under": 120}, "1.5": {...}}}
-              let books: Record<string, Record<string, { over?: number; under?: number }>> = {};
-              try { if (row.book_markets) books = JSON.parse(row.book_markets); } catch { /* ignore */ }
-              const primarySide = (row.primary_side ?? 'over') as 'over' | 'under';
-              const secondarySide = (row.secondary_side ?? 'over') as 'over' | 'under';
+              const { text: edgeText, color: edgeColor, weight: edgeWeight } = edgeDisplay(row._primary.edge, row._primary.hasLine);
+              const books = row._books;
+              const primarySide = row._primary.side;
+              const secondarySide = row._secondary.side;
+              const rawInput  = customOdds[row.batter] ?? '';
+              const customNum = parseCustomOdds(rawInput);
+              const myEdge     = customNum != null ? adjProbForSide(probForLine(row, row.primary_line), primarySide) - impliedFromAmerican(customNum) : null;
+              const myEdgeDisp = edgeDisplay(myEdge, customNum != null);
+              const trackedOdds = customNum ?? row._primary.odds;
+              const trackedEdge = customNum != null ? myEdge : row._primary.edge;
 
               return (
                 <Fragment key={`${row.game_pk}-${row.batter}`}>
@@ -466,54 +543,51 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
                     </td>
                     <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', fontWeight: 700, fontSize: '13px', color: adjProbColor(row.p_stat_1plus ?? 0) }}>{fmtProb(row.p_stat_1plus)}</td>
                     <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', color: 'var(--ev-muted)' }}>{fmtProb(row.p_stat_2plus)}</td>
-                    <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', color: 'var(--ev-dim)' }}>{fmtProj(row.pred_stat)}</td>
                     <td style={{ padding: '9px var(--cell-px)', textAlign: 'right' }}>
-                      {row.primary_has_line ? (
+                      {row._primary.hasLine ? (
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end' }}>
-                          <BookLogo book={row.primary_best_book} size={16} />
-                          <span style={{ color: 'var(--ev-dim)', fontSize: '10px' }}>{sideLabel(row.primary_side)}</span>
-                          <span style={{ color: 'var(--ev-blue)', fontWeight: 600, fontSize: '12px' }}>{fmtOdds(row.primary_best_odds)}</span>
-                        </div>
-                      ) : <span style={{ color: 'var(--ev-dim)', fontSize: '11px' }}>—</span>}
-                    </td>
-                    <td style={{ padding: '9px var(--cell-px)', textAlign: 'right' }}>
-                      {row.secondary_has_line ? (
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end' }}>
-                          <BookLogo book={row.secondary_best_book} size={16} />
-                          <span style={{ color: 'var(--ev-dim)', fontSize: '10px' }}>{sideLabel(row.secondary_side)}</span>
-                          <span style={{ color: 'var(--ev-blue)', fontWeight: 600, fontSize: '12px' }}>{fmtOdds(row.secondary_best_odds)}</span>
-                          <span onClick={e => e.stopPropagation()}>
-                            <TrackButton
-                              gameDate={toISODate(row.game_date)}
-                              batter={row.batter}
-                              playerName={row.player_name}
-                              teamAbbr={row.team_abbr}
-                              adjProb={adjProbForSide(probForLine(row, row.secondary_line), row.secondary_side)}
-                              trackedOdds={row.secondary_best_odds}
-                              trackedEdge={row.secondary_edge}
-                              statType={config.statType}
-                              line={row.secondary_line ?? 1.5}
-                              side={(row.secondary_side as 'over' | 'under' | undefined) ?? 'over'}
-                              isTracked={trackedSet.has(trackedKey(toISODate(row.game_date), row.batter, config.statType, row.secondary_line ?? 1.5))}
-                              authHeaders={authHeaders}
-                            />
-                          </span>
+                          <BookLogo book={row._primary.book} size={16} />
+                          <span style={{ color: 'var(--ev-dim)', fontSize: '10px' }}>{sideLabel(primarySide)}</span>
+                          <span style={{ color: 'var(--ev-blue)', fontWeight: 600, fontSize: '12px' }}>{fmtOdds(row._primary.odds)}</span>
                         </div>
                       ) : <span style={{ color: 'var(--ev-dim)', fontSize: '11px' }}>—</span>}
                     </td>
                     <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', color: edgeColor, fontWeight: edgeWeight }}>{edgeText}</td>
+                    <td style={{ padding: '8px 10px', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
+                      <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
+                        <input
+                          type="text"
+                          placeholder="ODDS"
+                          value={rawInput}
+                          onChange={e => setCustomOdds(prev => ({ ...prev, [row.batter]: e.target.value }))}
+                          style={{
+                            width: '72px', background: 'rgba(255,255,255,0.04)',
+                            border: `1px solid ${customNum != null ? 'rgba(255,200,0,0.4)' : 'rgba(255,255,255,0.08)'}`,
+                            borderRadius: '2px',
+                            color: customNum != null ? 'var(--ev-gold)' : 'rgba(255,255,255,0.25)',
+                            fontFamily: 'var(--font-mono)', fontSize: '11px',
+                            padding: '4px 7px', textAlign: 'right', outline: 'none',
+                          }}
+                        />
+                        {customNum != null && (
+                          <span style={{ fontSize: '10px', letterSpacing: '1px', color: myEdgeDisp.color, fontWeight: myEdgeDisp.weight }}>
+                            {myEdgeDisp.text}
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td style={{ padding: '8px 14px', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
                       <TrackButton
                         gameDate={toISODate(row.game_date)}
                         batter={row.batter}
                         playerName={row.player_name}
                         teamAbbr={row.team_abbr}
-                        adjProb={adjProbForSide(probForLine(row, row.primary_line), row.primary_side)}
-                        trackedOdds={row.primary_best_odds}
-                        trackedEdge={row.primary_edge}
+                        adjProb={adjProbForSide(probForLine(row, row.primary_line), primarySide)}
+                        trackedOdds={trackedOdds}
+                        trackedEdge={trackedEdge}
                         statType={config.statType}
                         line={row.primary_line ?? 0.5}
-                        side={(row.primary_side as 'over' | 'under' | undefined) ?? 'over'}
+                        side={primarySide}
                         isTracked={trackedSet.has(trackedKey(toISODate(row.game_date), row.batter, config.statType, row.primary_line ?? 0.5))}
                         authHeaders={authHeaders}
                       />
@@ -552,6 +626,40 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
                               </table>
                             )}
                           </div>
+
+                          {row._secondary.hasLine && (() => {
+                            const secEdge = edgeDisplay(row._secondary.edge, true);
+                            return (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                              <span style={{ ...LABEL, fontSize: '9px' }}>{`SECOND LINE (${row.secondary_line})`}</span>
+                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                <BookLogo book={row._secondary.book} size={14} />
+                                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--ev-dim)' }}>{sideLabel(secondarySide)}</span>
+                                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 600, color: 'var(--ev-blue)' }}>{fmtOdds(row._secondary.odds)}</span>
+                              </div>
+                              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: secEdge.color, fontWeight: secEdge.weight }}>
+                                {secEdge.text}
+                              </span>
+                              <span onClick={e => e.stopPropagation()} style={{ marginLeft: 'auto' }}>
+                                <TrackButton
+                                  gameDate={toISODate(row.game_date)}
+                                  batter={row.batter}
+                                  playerName={row.player_name}
+                                  teamAbbr={row.team_abbr}
+                                  adjProb={adjProbForSide(probForLine(row, row.secondary_line), secondarySide)}
+                                  trackedOdds={row._secondary.odds}
+                                  trackedEdge={row._secondary.edge}
+                                  statType={config.statType}
+                                  line={row.secondary_line ?? 1.5}
+                                  side={secondarySide}
+                                  isTracked={trackedSet.has(trackedKey(toISODate(row.game_date), row.batter, config.statType, row.secondary_line ?? 1.5))}
+                                  authHeaders={authHeaders}
+                                />
+                              </span>
+                            </div>
+                            );
+                          })()}
+
                           <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'rgba(255,255,255,0.3)', letterSpacing: '1px' }}>
                             {row.game_time && <span>{row.game_time}</span>}
                             {row.stadium && <span>{row.stadium}</span>}
@@ -599,11 +707,16 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
       <div className="mobile-card-list">
         {sorted.map(row => {
           const isExpanded = expanded === row.batter;
-          const { text: edgeText, color: edgeColor, weight: edgeWeight } = edgeDisplay(row.primary_edge, row.primary_has_line);
-          let books: Record<string, Record<string, { over?: number; under?: number }>> = {};
-          try { if (row.book_markets) books = JSON.parse(row.book_markets); } catch { /* ignore */ }
-          const primarySide = (row.primary_side ?? 'over') as 'over' | 'under';
-          const secondarySide = (row.secondary_side ?? 'over') as 'over' | 'under';
+          const { text: edgeText, color: edgeColor, weight: edgeWeight } = edgeDisplay(row._primary.edge, row._primary.hasLine);
+          const books = row._books;
+          const primarySide = row._primary.side;
+          const secondarySide = row._secondary.side;
+          const rawInput  = customOdds[row.batter] ?? '';
+          const customNum = parseCustomOdds(rawInput);
+          const myEdge     = customNum != null ? adjProbForSide(probForLine(row, row.primary_line), primarySide) - impliedFromAmerican(customNum) : null;
+          const myEdgeDisp = edgeDisplay(myEdge, customNum != null);
+          const trackedOdds = customNum ?? row._primary.odds;
+          const trackedEdge = customNum != null ? myEdge : row._primary.edge;
 
           return (
             <Fragment key={`m-${row.game_pk}-${row.batter}`}>
@@ -649,11 +762,11 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
                   <div>
                     <div style={{ ...LABEL, fontSize: '9px', marginBottom: '3px' }}>{`BOOK (${row.primary_line ?? '0.5'})`}</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      {row.primary_has_line ? (
+                      {row._primary.hasLine ? (
                         <>
-                          <BookLogo book={row.primary_best_book} size={16} />
-                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--ev-dim)' }}>{sideLabel(row.primary_side)}</span>
-                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', fontWeight: 600, color: 'var(--ev-blue)' }}>{fmtOdds(row.primary_best_odds)}</span>
+                          <BookLogo book={row._primary.book} size={16} />
+                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--ev-dim)' }}>{sideLabel(primarySide)}</span>
+                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', fontWeight: 600, color: 'var(--ev-blue)' }}>{fmtOdds(row._primary.odds)}</span>
                         </>
                       ) : <span style={{ color: 'var(--ev-dim)', fontSize: '12px' }}>—</span>}
                     </div>
@@ -664,31 +777,50 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
                       {edgeText}
                     </div>
                   </div>
-                  <div onClick={e => e.stopPropagation()} style={{ marginLeft: 'auto' }}>
+                  <div onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', justifyContent: 'flex-end' }}>
+                    <input
+                      type="text"
+                      placeholder="+350"
+                      value={rawInput}
+                      onChange={e => setCustomOdds(prev => ({ ...prev, [row.batter]: e.target.value }))}
+                      style={{
+                        width: '72px', background: 'rgba(255,255,255,0.06)',
+                        border: `1px solid ${customNum != null ? 'rgba(255,200,0,0.5)' : 'rgba(255,255,255,0.1)'}`,
+                        borderRadius: '4px',
+                        color: customNum != null ? 'var(--ev-gold)' : 'rgba(255,255,255,0.3)',
+                        fontFamily: 'var(--font-mono)', fontSize: '11px',
+                        padding: '4px 7px', textAlign: 'right', outline: 'none',
+                      }}
+                    />
+                    {customNum != null && (
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', color: myEdgeDisp.color, fontWeight: myEdgeDisp.weight }}>
+                        {myEdgeDisp.text}
+                      </span>
+                    )}
                     <TrackButton
                       gameDate={toISODate(row.game_date)}
                       batter={row.batter}
                       playerName={row.player_name}
                       teamAbbr={row.team_abbr}
-                      adjProb={adjProbForSide(probForLine(row, row.primary_line), row.primary_side)}
-                      trackedOdds={row.primary_best_odds}
-                      trackedEdge={row.primary_edge}
+                      adjProb={adjProbForSide(probForLine(row, row.primary_line), primarySide)}
+                      trackedOdds={trackedOdds}
+                      trackedEdge={trackedEdge}
                       statType={config.statType}
                       line={row.primary_line ?? 0.5}
-                      side={(row.primary_side as 'over' | 'under' | undefined) ?? 'over'}
+                      side={primarySide}
                       isTracked={trackedSet.has(trackedKey(toISODate(row.game_date), row.batter, config.statType, row.primary_line ?? 0.5))}
                       authHeaders={authHeaders}
                     />
                   </div>
                 </div>
 
-                {row.secondary_has_line && (
+                {row._secondary.hasLine && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingTop: '8px', marginTop: '2px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
                     <div style={{ ...LABEL, fontSize: '9px' }}>{`BOOK (${row.secondary_line})`}</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <BookLogo book={row.secondary_best_book} size={14} />
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--ev-dim)' }}>{sideLabel(row.secondary_side)}</span>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 600, color: 'var(--ev-blue)' }}>{fmtOdds(row.secondary_best_odds)}</span>
+                      <BookLogo book={row._secondary.book} size={14} />
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--ev-dim)' }}>{sideLabel(secondarySide)}</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 600, color: 'var(--ev-blue)' }}>{fmtOdds(row._secondary.odds)}</span>
                     </div>
                     <div onClick={e => e.stopPropagation()} style={{ marginLeft: 'auto' }}>
                       <TrackButton
@@ -696,12 +828,12 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
                         batter={row.batter}
                         playerName={row.player_name}
                         teamAbbr={row.team_abbr}
-                        adjProb={adjProbForSide(probForLine(row, row.secondary_line), row.secondary_side)}
-                        trackedOdds={row.secondary_best_odds}
-                        trackedEdge={row.secondary_edge}
+                        adjProb={adjProbForSide(probForLine(row, row.secondary_line), secondarySide)}
+                        trackedOdds={row._secondary.odds}
+                        trackedEdge={row._secondary.edge}
                         statType={config.statType}
                         line={row.secondary_line ?? 1.5}
-                        side={(row.secondary_side as 'over' | 'under' | undefined) ?? 'over'}
+                        side={secondarySide}
                         isTracked={trackedSet.has(trackedKey(toISODate(row.game_date), row.batter, config.statType, row.secondary_line ?? 1.5))}
                         authHeaders={authHeaders}
                       />
