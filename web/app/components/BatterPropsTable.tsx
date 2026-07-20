@@ -124,9 +124,9 @@ function adjProbForSide(prob: number | null, side: string | null | undefined): n
 // predict/shared_fair_odds.py intentionally always writes 'over' as
 // primary_side/secondary_side (a deliberate simplification -- see that
 // file's docstring). book_markets already carries BOTH over_price and
-// under_price per book/line, so "show whichever side the model actually
-// favors" can be computed entirely here from data already sent to the
-// browser, without touching the Python pipeline or regenerating any data.
+// under_price per book/line, so the REAL market favorite can be computed
+// entirely here from data already sent to the browser, without touching the
+// Python pipeline or regenerating any data.
 type BookMarkets = Record<string, Record<string, { over?: number; under?: number }>>;
 
 function parseBookMarkets(raw: string | null): BookMarkets {
@@ -150,22 +150,30 @@ function bestOddsForSide(books: BookMarkets, line: number | null, side: 'over' |
   return { book: bestBook, odds: bestOdds };
 }
 
-function favoredSide(prob: number | null): 'over' | 'under' {
-  return (prob ?? 1) >= 0.5 ? 'over' : 'under';
-}
-
 type LineDisplay = { side: 'over' | 'under'; book: string | null; odds: number | null; hasLine: boolean; edge: number | null };
 
 function computeLineDisplay(books: BookMarkets, line: number | null, prob: number | null): LineDisplay {
-  let side = favoredSide(prob);
-  let { book, odds } = bestOddsForSide(books, line, side);
-  if (odds == null) {
-    // Rare case: the market only ever posted the other side for this
-    // player/line. Show what's actually available rather than a blank cell.
-    const otherSide = side === 'over' ? 'under' : 'over';
-    const fallback = bestOddsForSide(books, line, otherSide);
-    if (fallback.odds != null) { side = otherSide; book = fallback.book; odds = fallback.odds; }
+  // Side is chosen by the REAL market, not by our own model's probability:
+  // whichever side has the higher implied probability (i.e. the more
+  // negative/less-plus American price) is what the book actually favors.
+  // A side priced at +money is an underdog price by definition -- showing
+  // that side while the other side is priced as the favorite was the bug
+  // (our model rarely calls 2+ TB a >50% favorite, but that's our model's
+  // opinion, not the market's, and the market is what "favored" means here).
+  const overBest  = bestOddsForSide(books, line, 'over');
+  const underBest = bestOddsForSide(books, line, 'under');
+  const overImplied  = overBest.odds  != null ? impliedFromAmerican(overBest.odds)  : null;
+  const underImplied = underBest.odds != null ? impliedFromAmerican(underBest.odds) : null;
+
+  let side: 'over' | 'under' = 'over';
+  let book = overBest.book;
+  let odds = overBest.odds;
+  if (overImplied != null && underImplied != null) {
+    if (underImplied > overImplied) { side = 'under'; book = underBest.book; odds = underBest.odds; }
+  } else if (underImplied != null) {
+    side = 'under'; book = underBest.book; odds = underBest.odds;
   }
+
   const hasLine = odds != null;
   let edge: number | null = null;
   if (hasLine && prob != null) {
