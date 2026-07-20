@@ -54,13 +54,22 @@ jobs:
       # the ephemeral runner filesystem for that one run -- the store and
       # every feature file stayed frozen at whatever was last manually
       # committed, no matter how many times this workflow ran per day.
+      #
+      # Runs ONLY on the first full-pipeline trigger of the day (8 AM ET).
+      # Each feature script re-aggregates full history (300K+ rows) with a
+      # groupby+rolling pass -- ~2 min locally with a warm pybaseball cache,
+      # meaningfully more on a cold CI runner. Running that 7x/day (once per
+      # full-pipeline trigger) roughly 7x'd this workflow's compute for no
+      # real benefit, since new completed games mostly land overnight
+      # between days, not multiple times within the same day -- that's the
+      # leading suspect for the pipeline failing across every run on 7/19.
       # continue-on-error: true matches daily_pipeline.py's own "non-fatal"
       # treatment of the Statcast update -- predictions should still run off
       # yesterday's features rather than block entirely on a fetch hiccup.
-      # Skipped on the log-only run, which doesn't score any predictions.
       - name: Update Statcast data and rebuild batter-props features
-        if: github.event.schedule != '0 10 * * *'
+        if: github.event.schedule == '0 12 * * *'
         continue-on-error: true
+        timeout-minutes: 15
         run: |
           python ingestion/update_statcast.py
           python features/batter_pa_features.py
