@@ -183,6 +183,35 @@ function computeLineDisplay(books: BookMarkets, line: number | null, prob: numbe
   return { side, book, odds, hasLine, edge };
 }
 
+// ── Market/model disagreement badge (Total Bases only) ──────────────────────
+// Total Bases' P(2+ TB) model is well-calibrated but rarely crosses 50% even
+// for elite hitters (audited against 83K historical rows: max ever seen is
+// ~64%, and >50% happens for well under 1% of predictions) -- so the book
+// pricing OVER 1.5 as the true favorite (negative odds) while our own model
+// still calls it <50% is a real, fairly common disagreement worth flagging,
+// not something to silently resolve one way or the other. Purely
+// informational: does not change primary/secondary side selection or edge.
+function hasMarketModelDisagreement(row: PropRow & { _primary: LineDisplay }, statType: StatType): boolean {
+  if (statType !== 'total_bases' || row.primary_line !== 1.5) return false;
+  if (row._primary.side !== 'over' || row._primary.odds == null || row._primary.odds >= 0) return false;
+  const modelProb = probForLine(row, row.primary_line);
+  return modelProb != null && modelProb < 0.5;
+}
+
+function DisagreementBadge() {
+  return (
+    <span
+      title="Book favors OVER but model probability is under 50%. Worth investigating before betting."
+      style={{
+        marginLeft: '5px', fontSize: '12px', cursor: 'help', color: 'var(--ev-gold)',
+        display: 'inline-block', verticalAlign: 'middle',
+      }}
+    >
+      ⚡
+    </span>
+  );
+}
+
 // ── MY LINE (custom odds) ───────────────────────────────────────────────────
 function parseCustomOdds(raw: string): number | null {
   const stripped = raw.trim().replace(/^\+/, '');
@@ -552,7 +581,10 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
                       {row.pitcher_name ?? 'TBD'}{row.p_throws && <span style={{ color: 'rgba(255,255,255,0.2)', marginLeft: '3px' }}>({row.p_throws})</span>}
                     </td>
                     <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', fontWeight: 700, fontSize: '13px', color: adjProbColor(row.p_stat_1plus ?? 0) }}>{fmtProb(row.p_stat_1plus)}</td>
-                    <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', color: 'var(--ev-muted)' }}>{fmtProb(row.p_stat_2plus)}</td>
+                    <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', color: 'var(--ev-muted)' }}>
+                      {fmtProb(row.p_stat_2plus)}
+                      {hasMarketModelDisagreement(row, config.statType) && <DisagreementBadge />}
+                    </td>
                     <td style={{ padding: '9px var(--cell-px)', textAlign: 'right' }}>
                       <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
@@ -786,6 +818,7 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
                     <div style={{ ...LABEL, fontSize: '9px', marginBottom: '3px' }}>{config.prob2Label}</div>
                     <div style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', color: 'var(--ev-muted)' }}>
                       {fmtProb(row.p_stat_2plus)}
+                      {hasMarketModelDisagreement(row, config.statType) && <DisagreementBadge />}
                     </div>
                   </div>
                   <div>

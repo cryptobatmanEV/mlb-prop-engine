@@ -112,6 +112,7 @@ def build():
         sum_tb  = r['tb'].sum()
         sum_bip = r['batted_balls'].sum()
         sum_dbl = r['doubles'].sum()
+        sum_trp = r['triples'].sum()
 
         sub['batting_avg_15']   = sum_h / sum_ab
         sub['obp_15']           = (sum_h + sum_bb + sum_hbp) / (sum_ab + sum_bb + sum_hbp + sum_sf)
@@ -121,6 +122,7 @@ def build():
         sub['iso_15']           = (sum_tb - sum_h) / sum_ab
         sub['hr_rate_15']       = sum_hr / sum_pa
         sub['doubles_rate_15']  = sum_dbl / sum_pa
+        sub['extra_base_hit_rate_15'] = (sum_dbl + sum_trp + sum_hr) / sum_ab
         sub['avg_total_bases_15'] = r['tb'].mean()
         sub['avg_k_per_game_15']  = r['k'].mean()
 
