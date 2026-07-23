@@ -138,13 +138,14 @@ function impliedFromAmerican(o: number): number {
   return o > 0 ? 100 / (o + 100) : Math.abs(o) / (Math.abs(o) + 100);
 }
 
-function bestOddsForSide(books: BookMarkets, line: number | null, side: 'over' | 'under'): { book: string | null; odds: number | null } {
+function bestOddsForSide(books: BookMarkets, line: number | null, side: 'over' | 'under', negativeOnly = false): { book: string | null; odds: number | null } {
   if (line == null) return { book: null, odds: null };
   let bestBook: string | null = null;
   let bestOdds: number | null = null;
   for (const [bk, lines] of Object.entries(books)) {
     const o = lines[String(line)]?.[side];
     if (o == null) continue;
+    if (negativeOnly && o >= 0) continue;
     if (bestOdds == null || o > bestOdds) { bestOdds = o; bestBook = bk; }
   }
   return { book: bestBook, odds: bestOdds };
@@ -153,25 +154,41 @@ function bestOddsForSide(books: BookMarkets, line: number | null, side: 'over' |
 type LineDisplay = { side: 'over' | 'under'; book: string | null; odds: number | null; hasLine: boolean; edge: number | null };
 
 function computeLineDisplay(books: BookMarkets, line: number | null, prob: number | null): LineDisplay {
-  // Side is chosen by the REAL market, not by our own model's probability:
-  // whichever side has the higher implied probability (i.e. the more
-  // negative/less-plus American price) is what the book actually favors.
-  // A side priced at +money is an underdog price by definition -- showing
-  // that side while the other side is priced as the favorite was the bug
-  // (our model rarely calls 2+ TB a >50% favorite, but that's our model's
-  // opinion, not the market's, and the market is what "favored" means here).
-  const overBest  = bestOddsForSide(books, line, 'over');
-  const underBest = bestOddsForSide(books, line, 'under');
-  const overImplied  = overBest.odds  != null ? impliedFromAmerican(overBest.odds)  : null;
-  const underImplied = underBest.odds != null ? impliedFromAmerican(underBest.odds) : null;
+  // The market favorite is determined using only NEGATIVE (favorite-priced)
+  // odds per side -- a book pricing a side at +money doesn't consider that
+  // side its favorite, so comparing one book's underdog price against a
+  // *different* book's favorite price (comparing best-available-per-side
+  // across all books, regardless of sign) could surface a book's own
+  // +money price as if it were "the favorite". E.g. for Lars Nootbaar's
+  // 1.5 TB, betmgm's under +105 doesn't mean under is favored -- betmgm
+  // itself prices over as its favorite (-145); draftkings' -130 on over is
+  // the correct comparison against draftkings' own -105 on under.
+  const overNeg  = bestOddsForSide(books, line, 'over', true);
+  const underNeg = bestOddsForSide(books, line, 'under', true);
 
-  let side: 'over' | 'under' = 'over';
-  let book = overBest.book;
-  let odds = overBest.odds;
-  if (overImplied != null && underImplied != null) {
-    if (underImplied > overImplied) { side = 'under'; book = underBest.book; odds = underBest.odds; }
-  } else if (underImplied != null) {
-    side = 'under'; book = underBest.book; odds = underBest.odds;
+  let side: 'over' | 'under';
+  let book: string | null;
+  let odds: number | null;
+
+  if (overNeg.odds != null && underNeg.odds != null) {
+    side = impliedFromAmerican(underNeg.odds) > impliedFromAmerican(overNeg.odds) ? 'under' : 'over';
+    ({ book, odds } = side === 'under' ? underNeg : overNeg);
+  } else if (overNeg.odds != null) {
+    side = 'over'; book = overNeg.book; odds = overNeg.odds;
+  } else if (underNeg.odds != null) {
+    side = 'under'; book = underNeg.book; odds = underNeg.odds;
+  } else {
+    // Rare: no book prices either side as a clear favorite (all +money, or
+    // no odds at all) -- fall back to comparing best-available price per
+    // side regardless of sign, same as before this fix.
+    const overBest  = bestOddsForSide(books, line, 'over');
+    const underBest = bestOddsForSide(books, line, 'under');
+    const overImplied  = overBest.odds  != null ? impliedFromAmerican(overBest.odds)  : null;
+    const underImplied = underBest.odds != null ? impliedFromAmerican(underBest.odds) : null;
+    side = 'over'; book = overBest.book; odds = overBest.odds;
+    if (underImplied != null && (overImplied == null || underImplied > overImplied)) {
+      side = 'under'; book = underBest.book; odds = underBest.odds;
+    }
   }
 
   const hasLine = odds != null;

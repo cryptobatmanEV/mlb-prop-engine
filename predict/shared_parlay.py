@@ -62,6 +62,56 @@ def norm_name(name):
     return re.sub(r'[^a-z ]', '', name.lower().strip())
 
 
+def _fetch_fanduel_tb_alt_as_over_1_5(window_start, window_end):
+    """
+    FanDuel doesn't expose a standard two-sided player_total_bases market
+    through ParlayAPI -- confirmed 2026-07-23: a fanduel-only call for
+    player_total_bases returns zero rows with that market_key, only
+    player_total_bases_alt milestone rows ("2/3/4/5 Or More", over-only,
+    no under price). FanDuel's "2 Or More" milestone (line=2.0) is
+    semantically identical to our over-1.5-TB line, so it's mapped in here
+    as a synthetic fanduel row: line=1.5, over_odds=<milestone price>,
+    under_odds=None. This surfaces FanDuel's real price on this side even
+    though FanDuel has no genuine "under" counterpart to pair with it --
+    the missing under_odds is what distinguishes it from a standard
+    two-sided line downstream (book_markets simply won't have a "under"
+    key for fanduel at this line).
+    """
+    try:
+        r, raw = _parlay_get('/sports/baseball_mlb/props',
+                              params={'markets': 'player_total_bases_alt', 'bookmakers': 'fanduel'})
+    except Exception as e:
+        print(f"  ParlayAPI error fetching fanduel player_total_bases_alt: {e}")
+        return []
+
+    chunk = raw if isinstance(raw, list) else raw.get('data', raw.get('results', raw.get('props', [])))
+    rows = []
+    for row in chunk:
+        ct = row.get('commence_time', '')
+        if not (window_start <= ct < window_end):
+            continue
+        if row.get('market_key') != 'player_total_bases_alt':
+            continue
+        line = row.get('line')
+        if line is None or float(line) != 2.0:
+            continue
+        over_price = row.get('over_price')
+        if over_price is None:
+            continue
+        player = row.get('player', '')
+        if not player or player.strip().rstrip('+').isdigit():
+            continue
+        rows.append({
+            'player_name_raw':   player,
+            'bookmaker':         'fanduel',
+            'line':              1.5,
+            'over_odds':         int(over_price),
+            'under_odds':        None,
+            'event_id':          row.get('canonical_event_id', ''),
+        })
+    return rows
+
+
 def fetch_batter_props(date_str, market_key, valid_lines):
     """
     Fetch one batter-prop market from ParlayAPI using the 3-bookmaker-group
@@ -178,6 +228,24 @@ def fetch_batter_props(date_str, market_key, valid_lines):
             'under_odds':        int(under_price) if under_price is not None else None,
             'event_id':          eid,
         })
+
+    if market_key == 'player_total_bases' and 1.5 in valid_lines:
+        existing_fanduel_15 = {
+            row['player_name_raw'] for row in prop_rows
+            if row['bookmaker'] == 'fanduel' and row['line'] == 1.5
+        }
+        alt_rows = [
+            row for row in _fetch_fanduel_tb_alt_as_over_1_5(window_start, window_end)
+            if row['player_name_raw'] not in existing_fanduel_15
+        ]
+        if alt_rows:
+            print(f"  ParlayAPI: mapped {len(alt_rows)} FanDuel player_total_bases_alt "
+                  f"'2 Or More' row(s) to over 1.5 TB (FanDuel has no standard two-sided market)")
+        prop_rows.extend(alt_rows)
+        for row in alt_rows:
+            eid = row['event_id']
+            if eid and eid not in seen_events:
+                seen_events[eid] = {'id': eid, 'home_team': '', 'away_team': '', 'commence_time': ''}
 
     events_for_matching = list(seen_events.values())
     n_events = len(events_for_matching)
