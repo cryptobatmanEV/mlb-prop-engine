@@ -108,12 +108,35 @@ def fetch_batter_props(date_str, market_key, valid_lines):
     if not all_raw_rows:
         return [], pd.DataFrame(), credits_used, failed_count, credits_remaining
 
-    seen_keys, deduped = set(), []
+    # ParlayAPI occasionally returns two rows for the exact same
+    # (player, bookmaker, market_key, line) -- observed 2026-07-23 for
+    # DraftKings player_hits: a stale/mislabeled "Hits O/U" row (e.g.
+    # over +310/under -450) alongside the real current "Hits" price
+    # (over -239/under +177) for the same market. Keeping whichever row
+    # happened to come first in the raw API array was arbitrary and could
+    # (and did) surface the wrong price. Keep whichever row has the later
+    # last_update instead; if either timestamp is missing/unparseable,
+    # fall back to keeping the first-seen row (previous behavior).
+    def _parse_last_update(row):
+        ts = row.get('last_update')
+        if not ts:
+            return None
+        try:
+            return datetime.fromisoformat(str(ts).replace('Z', '+00:00'))
+        except (ValueError, TypeError):
+            return None
+
+    best_by_key = {}
     for row in all_raw_rows:
         key = (row.get('player'), row.get('bookmaker'), row.get('market_key'), row.get('line'))
-        if key not in seen_keys:
-            seen_keys.add(key)
-            deduped.append(row)
+        if key not in best_by_key:
+            best_by_key[key] = row
+            continue
+        existing_ts = _parse_last_update(best_by_key[key])
+        new_ts = _parse_last_update(row)
+        if new_ts is not None and existing_ts is not None and new_ts > existing_ts:
+            best_by_key[key] = row
+    deduped = list(best_by_key.values())
 
     prop_rows, seen_events = [], {}
     for row in deduped:

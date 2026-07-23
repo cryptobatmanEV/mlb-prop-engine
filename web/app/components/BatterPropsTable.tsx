@@ -198,6 +198,57 @@ function hasMarketModelDisagreement(row: PropRow & { _primary: LineDisplay }, st
   return modelProb != null && modelProb < 0.5;
 }
 
+// ── Market odds table (matches HR's DetailCard style: one row per book,
+// logo + name left, odds right, green for positive odds, muted white for
+// negative) -- extended with a small chip per line since these markets can
+// have two lines (0.5 and 1.5) per book, unlike HR's single-line market.
+function MarketOddsTable({ books, primaryLine, primarySide, secondaryLine, secondarySide }: {
+  books: BookMarkets; primaryLine: number | null; primarySide: 'over' | 'under';
+  secondaryLine: number | null; secondarySide: 'over' | 'under';
+}) {
+  const oddsFor = (lines: Record<string, { over?: number; under?: number }>, line: number | null, side: 'over' | 'under') =>
+    line != null ? lines[String(line)]?.[side] ?? null : null;
+
+  const bookRows = Object.entries(books)
+    .map(([bk, lines]) => ({
+      bk,
+      primaryOdds: oddsFor(lines, primaryLine, primarySide),
+      secondaryOdds: oddsFor(lines, secondaryLine, secondarySide),
+    }))
+    .filter(r => r.primaryOdds != null || r.secondaryOdds != null);
+
+  if (bookRows.length === 0) {
+    return <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'rgba(255,255,255,0.25)' }}>NO MARKET LINES YET</div>;
+  }
+
+  const chipStyle = (odds: number): React.CSSProperties => ({
+    fontFamily: 'var(--font-mono)', fontSize: '11px', padding: '3px 7px', borderRadius: '3px',
+    background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+    color: odds > 0 ? 'var(--ev-green)' : 'rgba(255,255,255,0.9)', whiteSpace: 'nowrap',
+  });
+
+  return (
+    <div>
+      {bookRows.map(({ bk, primaryOdds, secondaryOdds }) => (
+        <div key={bk} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', padding: '7px 0', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'rgba(255,255,255,0.8)' }}>
+            <BookLogo book={bk} size={16} />
+            {bk}
+          </div>
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {primaryOdds != null && (
+              <span style={chipStyle(primaryOdds)}>{sideLabel(primarySide)} {primaryLine}: {fmtOdds(primaryOdds)}</span>
+            )}
+            {secondaryOdds != null && (
+              <span style={chipStyle(secondaryOdds)}>{sideLabel(secondarySide)} {secondaryLine}: {fmtOdds(secondaryOdds)}</span>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function DisagreementBadge() {
   return (
     <span
@@ -659,32 +710,13 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
                         <div style={{ padding: '16px', background: 'rgba(255,255,255,0.012)', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                           <div style={{ background: '#111416', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', padding: '10px 12px' }}>
                             <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '2px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', marginBottom: '8px' }}>MARKET ODDS (ALL BOOKS)</div>
-                            {Object.keys(books).length === 0 ? (
-                              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'rgba(255,255,255,0.25)' }}>NO MARKET LINES YET</div>
-                            ) : (
-                              <table style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', width: '100%', borderCollapse: 'collapse' }}>
-                                <thead><tr>
-                                  <th style={{ textAlign: 'left', color: 'rgba(255,255,255,0.35)', fontSize: '9px', fontWeight: 400, padding: '0 0 6px' }}>BOOK</th>
-                                  <th style={{ textAlign: 'right', color: 'rgba(255,255,255,0.35)', fontSize: '9px', fontWeight: 400, padding: '0 0 6px' }}>{sideLabel(primarySide)} {row.primary_line}</th>
-                                  <th style={{ textAlign: 'right', color: 'rgba(255,255,255,0.35)', fontSize: '9px', fontWeight: 400, padding: '0 0 6px' }}>{sideLabel(secondarySide)} {row.secondary_line}</th>
-                                </tr></thead>
-                                <tbody>
-                                  {Object.entries(books).map(([bk, lines]) => {
-                                    const primaryOdds = lines[String(row.primary_line)]?.[primarySide];
-                                    const secondaryOdds = lines[String(row.secondary_line)]?.[secondarySide];
-                                    return (
-                                      <tr key={bk} style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-                                        <td style={{ padding: '6px 0', color: 'rgba(255,255,255,0.8)' }}>
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><BookLogo book={bk} size={14} />{bk}</div>
-                                        </td>
-                                        <td style={{ textAlign: 'right', color: 'rgba(255,255,255,0.8)' }}>{primaryOdds != null ? fmtOdds(primaryOdds) : '—'}</td>
-                                        <td style={{ textAlign: 'right', color: 'rgba(255,255,255,0.8)' }}>{secondaryOdds != null ? fmtOdds(secondaryOdds) : '—'}</td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            )}
+                            <MarketOddsTable
+                              books={books}
+                              primaryLine={row.primary_line}
+                              primarySide={primarySide}
+                              secondaryLine={row.secondary_line}
+                              secondarySide={secondarySide}
+                            />
                           </div>
 
                           {row._secondary.hasLine && (() => {
@@ -876,33 +908,6 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
                   </div>
                 </div>
 
-                {row._secondary.hasLine && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingTop: '8px', marginTop: '2px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                    <div style={{ ...LABEL, fontSize: '9px' }}>{`BOOK (${row.secondary_line})`}</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <BookLogo book={row._secondary.book} size={14} />
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--ev-dim)' }}>{sideLabel(secondarySide)}</span>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 600, color: 'var(--ev-blue)' }}>{fmtOdds(row._secondary.odds)}</span>
-                    </div>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: edge2Color, fontWeight: edge2Weight }}>{edge2Text}</span>
-                    <div onClick={e => e.stopPropagation()} style={{ marginLeft: 'auto' }}>
-                      <TrackButton
-                        gameDate={toISODate(row.game_date)}
-                        batter={row.batter}
-                        playerName={row.player_name}
-                        teamAbbr={row.team_abbr}
-                        adjProb={adjProbForSide(probForLine(row, row.secondary_line), secondarySide)}
-                        trackedOdds={row._secondary.odds}
-                        trackedEdge={row._secondary.edge}
-                        statType={config.statType}
-                        line={row.secondary_line ?? 1.5}
-                        side={secondarySide}
-                        isTracked={trackedSet.has(trackedKey(toISODate(row.game_date), row.batter, config.statType, row.secondary_line ?? 1.5))}
-                        authHeaders={authHeaders}
-                      />
-                    </div>
-                  </div>
-                )}
               </div>
 
               {isExpanded && (
@@ -910,32 +915,42 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
                   <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '2px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', marginBottom: '8px' }}>
                     MARKET ODDS (ALL BOOKS)
                   </div>
-                  {Object.keys(books).length === 0 ? (
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'rgba(255,255,255,0.25)' }}>NO MARKET LINES YET</div>
-                  ) : (
-                    <table style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', width: '100%', borderCollapse: 'collapse' }}>
-                      <thead><tr>
-                        <th style={{ textAlign: 'left', color: 'rgba(255,255,255,0.35)', fontSize: '9px', fontWeight: 400, padding: '0 0 6px' }}>BOOK</th>
-                        <th style={{ textAlign: 'right', color: 'rgba(255,255,255,0.35)', fontSize: '9px', fontWeight: 400, padding: '0 0 6px' }}>{sideLabel(primarySide)} {row.primary_line}</th>
-                        <th style={{ textAlign: 'right', color: 'rgba(255,255,255,0.35)', fontSize: '9px', fontWeight: 400, padding: '0 0 6px' }}>{sideLabel(secondarySide)} {row.secondary_line}</th>
-                      </tr></thead>
-                      <tbody>
-                        {Object.entries(books).map(([bk, lines]) => {
-                          const primaryOdds = lines[String(row.primary_line)]?.[primarySide];
-                          const secondaryOdds = lines[String(row.secondary_line)]?.[secondarySide];
-                          return (
-                            <tr key={bk} style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-                              <td style={{ padding: '6px 0', color: 'rgba(255,255,255,0.8)' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><BookLogo book={bk} size={14} />{bk}</div>
-                              </td>
-                              <td style={{ textAlign: 'right', color: 'rgba(255,255,255,0.8)' }}>{primaryOdds != null ? fmtOdds(primaryOdds) : '—'}</td>
-                              <td style={{ textAlign: 'right', color: 'rgba(255,255,255,0.8)' }}>{secondaryOdds != null ? fmtOdds(secondaryOdds) : '—'}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                  <MarketOddsTable
+                    books={books}
+                    primaryLine={row.primary_line}
+                    primarySide={primarySide}
+                    secondaryLine={row.secondary_line}
+                    secondarySide={secondarySide}
+                  />
+
+                  {row._secondary.hasLine && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '12px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                      <div style={{ ...LABEL, fontSize: '9px' }}>{`SECOND LINE (${row.secondary_line})`}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <BookLogo book={row._secondary.book} size={14} />
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--ev-dim)' }}>{sideLabel(secondarySide)}</span>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 600, color: 'var(--ev-blue)' }}>{fmtOdds(row._secondary.odds)}</span>
+                      </div>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: edge2Color, fontWeight: edge2Weight }}>{edge2Text}</span>
+                      <div onClick={e => e.stopPropagation()} style={{ marginLeft: 'auto' }}>
+                        <TrackButton
+                          gameDate={toISODate(row.game_date)}
+                          batter={row.batter}
+                          playerName={row.player_name}
+                          teamAbbr={row.team_abbr}
+                          adjProb={adjProbForSide(probForLine(row, row.secondary_line), secondarySide)}
+                          trackedOdds={row._secondary.odds}
+                          trackedEdge={row._secondary.edge}
+                          statType={config.statType}
+                          line={row.secondary_line ?? 1.5}
+                          side={secondarySide}
+                          isTracked={trackedSet.has(trackedKey(toISODate(row.game_date), row.batter, config.statType, row.secondary_line ?? 1.5))}
+                          authHeaders={authHeaders}
+                        />
+                      </div>
+                    </div>
                   )}
+
                   <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'rgba(255,255,255,0.3)', marginTop: '10px' }}>
                     {row.stadium && <span>{row.stadium}</span>}
                     {row.opp_team && <span>VS {row.opp_team}</span>}

@@ -133,12 +133,22 @@ export default async function Home({
 
       const aiPicksTable = table.replace('_predictions', '_ai_picks_log');
       try {
+        // The pipeline logs a fresh AI Picks snapshot ~8x/day, so a player
+        // who qualifies across multiple runs previously showed up once per
+        // capture (e.g. the same player 3-5 times in one day). DISTINCT ON
+        // (batter) + ORDER BY batter, captured_at DESC keeps only each
+        // player's most recent capture; the outer query re-sorts that
+        // deduped set by composite_score for display.
         aiPickRows = await sql(
-          `SELECT batter, player_name, team_abbr, bat_order, best_odds, best_book,
-                  edge, adj_prob, book_line, book_side, composite_score, result
-             FROM ${aiPicksTable}
-            WHERE game_date = $1::date
-            ORDER BY composite_score DESC`,
+          `SELECT * FROM (
+             SELECT DISTINCT ON (batter)
+                    batter, player_name, team_abbr, bat_order, best_odds, best_book,
+                    edge, adj_prob, book_line, book_side, composite_score, result
+               FROM ${aiPicksTable}
+              WHERE game_date = $1::date
+              ORDER BY batter, captured_at DESC
+           ) latest
+           ORDER BY composite_score DESC`,
           [validDate],
         ) as unknown as AiPickRow[];
       } catch {
