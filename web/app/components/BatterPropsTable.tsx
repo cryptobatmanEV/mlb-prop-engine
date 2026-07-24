@@ -217,48 +217,51 @@ function hasMarketModelDisagreement(row: PropRow & { _primary: LineDisplay }, st
 
 // ── Market odds table (matches HR's DetailCard style: one row per book,
 // logo + name left, odds right, green for positive odds, muted white for
-// negative) -- extended with a small chip per line since these markets can
-// have two lines (0.5 and 1.5) per book, unlike HR's single-line market.
-function MarketOddsTable({ books, primaryLine, primarySide, secondaryLine, secondarySide }: {
-  books: BookMarkets; primaryLine: number | null; primarySide: 'over' | 'under';
-  secondaryLine: number | null; secondarySide: 'over' | 'under';
+// negative) -- shows EVERY available price (both sides, both lines) per
+// book, not just whichever side/line we've decided is "favored" elsewhere
+// in the UI. Users need the full picture to make their own call.
+function MarketOddsTable({ books, primaryLine, secondaryLine }: {
+  books: BookMarkets; primaryLine: number | null; secondaryLine: number | null;
 }) {
-  const oddsFor = (lines: Record<string, { over?: number; under?: number }>, line: number | null, side: 'over' | 'under') =>
-    line != null ? lines[String(line)]?.[side] ?? null : null;
+  const lines = [primaryLine, secondaryLine]
+    .filter((l): l is number => l != null)
+    .sort((a, b) => a - b);
+
+  const chipStyle = (odds: number): React.CSSProperties => ({
+    fontFamily: 'var(--font-mono)', fontSize: '11px', padding: '3px 7px', borderRadius: '3px',
+    background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+    color: odds > 0 ? 'var(--ev-green)' : 'rgba(255,255,255,0.85)', whiteSpace: 'nowrap',
+  });
 
   const bookRows = Object.entries(books)
-    .map(([bk, lines]) => ({
-      bk,
-      primaryOdds: oddsFor(lines, primaryLine, primarySide),
-      secondaryOdds: oddsFor(lines, secondaryLine, secondarySide),
-    }))
-    .filter(r => r.primaryOdds != null || r.secondaryOdds != null);
+    .map(([bk, bkLines]) => {
+      const chips: { key: string; label: string; odds: number }[] = [];
+      for (const line of lines) {
+        const sides = bkLines[String(line)];
+        if (!sides) continue;
+        if (sides.over != null)  chips.push({ key: `${line}-over`,  label: `O ${line}`, odds: sides.over });
+        if (sides.under != null) chips.push({ key: `${line}-under`, label: `U ${line}`, odds: sides.under });
+      }
+      return { bk, chips };
+    })
+    .filter(r => r.chips.length > 0);
 
   if (bookRows.length === 0) {
     return <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'rgba(255,255,255,0.25)' }}>NO MARKET LINES YET</div>;
   }
 
-  const chipStyle = (odds: number): React.CSSProperties => ({
-    fontFamily: 'var(--font-mono)', fontSize: '11px', padding: '3px 7px', borderRadius: '3px',
-    background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-    color: odds > 0 ? 'var(--ev-green)' : 'rgba(255,255,255,0.9)', whiteSpace: 'nowrap',
-  });
-
   return (
     <div>
-      {bookRows.map(({ bk, primaryOdds, secondaryOdds }) => (
+      {bookRows.map(({ bk, chips }) => (
         <div key={bk} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', padding: '7px 0', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'rgba(255,255,255,0.8)' }}>
             <BookLogo book={bk} size={16} />
             {bk}
           </div>
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            {primaryOdds != null && (
-              <span style={chipStyle(primaryOdds)}>{sideLabel(primarySide)} {primaryLine}: {fmtOdds(primaryOdds)}</span>
-            )}
-            {secondaryOdds != null && (
-              <span style={chipStyle(secondaryOdds)}>{sideLabel(secondarySide)} {secondaryLine}: {fmtOdds(secondaryOdds)}</span>
-            )}
+            {chips.map(c => (
+              <span key={c.key} style={chipStyle(c.odds)}>{c.label}: {fmtOdds(c.odds)}</span>
+            ))}
           </div>
         </div>
       ))}
@@ -730,9 +733,7 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
                             <MarketOddsTable
                               books={books}
                               primaryLine={row.primary_line}
-                              primarySide={primarySide}
                               secondaryLine={row.secondary_line}
-                              secondarySide={secondarySide}
                             />
                           </div>
 
@@ -935,9 +936,7 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
                   <MarketOddsTable
                     books={books}
                     primaryLine={row.primary_line}
-                    primarySide={primarySide}
                     secondaryLine={row.secondary_line}
-                    secondarySide={secondarySide}
                   />
 
                   {row._secondary.hasLine && (
