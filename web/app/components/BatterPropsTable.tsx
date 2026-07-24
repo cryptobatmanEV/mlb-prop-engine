@@ -451,16 +451,19 @@ type EnrichedRow = PropRow & { _books: BookMarkets; _primary: LineDisplay; _seco
 // primary line is 1.5, the reverse of Hits/Batter Ks, which meant the main
 // row's stacked BOOK column showed 1.5 above 0.5 for Total Bases only.
 // Always display numeric-ascending (0.5 first) instead.
-type OrderedLine = { line: number | null; side: 'over' | 'under'; hasLine: boolean; book: string | null; odds: number | null; edge: ReturnType<typeof edgeDisplay> };
+type OrderedLine = {
+  line: number | null; side: 'over' | 'under'; hasLine: boolean; book: string | null;
+  odds: number | null; edgeValue: number | null; isPrimary: boolean;
+};
 
 function orderedLines(row: EnrichedRow, primarySide: 'over' | 'under', secondarySide: 'over' | 'under'): [OrderedLine, OrderedLine] {
   const primaryInfo: OrderedLine = {
     line: row.primary_line, side: primarySide, hasLine: row._primary.hasLine,
-    book: row._primary.book, odds: row._primary.odds, edge: edgeDisplay(row._primary.edge, row._primary.hasLine),
+    book: row._primary.book, odds: row._primary.odds, edgeValue: row._primary.edge, isPrimary: true,
   };
   const secondaryInfo: OrderedLine = {
     line: row.secondary_line, side: secondarySide, hasLine: row._secondary.hasLine,
-    book: row._secondary.book, odds: row._secondary.odds, edge: edgeDisplay(row._secondary.edge, row._secondary.hasLine),
+    book: row._secondary.book, odds: row._secondary.odds, edgeValue: row._secondary.edge, isPrimary: false,
   };
   const primaryIsLower = (row.primary_line ?? 0.5) <= (row.secondary_line ?? 1.5);
   return primaryIsLower ? [primaryInfo, secondaryInfo] : [secondaryInfo, primaryInfo];
@@ -549,11 +552,13 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
     { key: null, label: 'VS', align: 'left' },
     { key: 'p_stat_1plus', label: config.prob1Label, align: 'right' },
     { key: 'p_stat_2plus', label: config.prob2Label, align: 'right' },
-    { key: null, label: 'BOOK', align: 'right' },
+    { key: null, label: '0.5', align: 'right' },
+    { key: null, label: '1.5', align: 'right' },
     { key: primaryIsLower ? 'primary_edge' : null, label: 'EDGE (0.5)', align: 'right' },
     { key: primaryIsLower ? null : 'primary_edge', label: 'EDGE (1.5)', align: 'right' },
     { key: null, label: 'MY LINE', align: 'right' },
-    { key: null, label: 'TRACK', align: 'right' },
+    { key: null, label: 'TRACK 0.5', align: 'right' },
+    { key: null, label: 'TRACK 1.5', align: 'right' },
   ];
 
   return (
@@ -653,8 +658,6 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
               const customNum = parseCustomOdds(rawInput);
               const myEdge     = customNum != null ? adjProbForSide(probForLine(row, row.primary_line), primarySide) - impliedFromAmerican(customNum) : null;
               const myEdgeDisp = edgeDisplay(myEdge, customNum != null);
-              const trackedOdds = customNum ?? row._primary.odds;
-              const trackedEdge = customNum != null ? myEdge : row._primary.edge;
 
               return (
                 <Fragment key={`${row.game_pk}-${row.batter}`}>
@@ -681,30 +684,25 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
                       {fmtProb(row.p_stat_2plus)}
                       {hasMarketModelDisagreement(row, config.statType) && <DisagreementBadge />}
                     </td>
-                    <td style={{ padding: '9px var(--cell-px)', textAlign: 'right' }}>
-                      <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: '5px' }}>
-                        {[lowLine, highLine].map((l, i) => (
-                          <div key={i} style={{
-                            display: 'inline-flex', alignItems: 'center', gap: '5px',
-                            paddingTop: i === 1 ? '5px' : 0,
-                            borderTop: i === 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
-                            width: '100%', justifyContent: 'flex-end',
-                          }}>
-                            {l.hasLine ? (
-                              <>
-                                <BookLogo book={l.book} size={13} />
-                                <span style={{ color: 'var(--ev-dim)', fontSize: '9px' }}>{sideLabel(l.side)} {l.line}</span>
-                                <span style={{ color: 'var(--ev-blue)', fontWeight: 600, fontSize: '12px' }}>{fmtOdds(l.odds)}</span>
-                              </>
-                            ) : (
-                              <span style={{ color: 'var(--ev-dim)', fontSize: '10px' }}>{l.line} —</span>
-                            )}
+                    {[lowLine, highLine].map((l, i) => (
+                      <td key={i} style={{ padding: '9px var(--cell-px)', textAlign: 'right' }}>
+                        {l.hasLine ? (
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                            <BookLogo book={l.book} size={14} />
+                            <span style={{ color: 'var(--ev-dim)', fontSize: '9px' }}>{sideLabel(l.side)}</span>
+                            <span style={{ color: 'var(--ev-blue)', fontWeight: 600, fontSize: '12px' }}>{fmtOdds(l.odds)}</span>
                           </div>
-                        ))}
-                      </div>
-                    </td>
-                    <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', color: lowLine.edge.color, fontWeight: lowLine.edge.weight }}>{lowLine.edge.text}</td>
-                    <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', color: highLine.edge.color, fontWeight: highLine.edge.weight }}>{highLine.edge.text}</td>
+                        ) : (
+                          <span style={{ color: 'var(--ev-dim)', fontSize: '11px' }}>—</span>
+                        )}
+                      </td>
+                    ))}
+                    {[lowLine, highLine].map((l, i) => {
+                      const d = edgeDisplay(l.edgeValue, l.hasLine);
+                      return (
+                        <td key={i} style={{ padding: '9px var(--cell-px)', textAlign: 'right', color: d.color, fontWeight: d.weight }}>{d.text}</td>
+                      );
+                    })}
                     <td style={{ padding: '8px 10px', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
                       <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
                         <input
@@ -728,22 +726,24 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
                         )}
                       </div>
                     </td>
-                    <td style={{ padding: '8px 14px', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
-                      <TrackButton
-                        gameDate={toISODate(row.game_date)}
-                        batter={row.batter}
-                        playerName={row.player_name}
-                        teamAbbr={row.team_abbr}
-                        adjProb={adjProbForSide(probForLine(row, row.primary_line), primarySide)}
-                        trackedOdds={trackedOdds}
-                        trackedEdge={trackedEdge}
-                        statType={config.statType}
-                        line={row.primary_line ?? 0.5}
-                        side={primarySide}
-                        isTracked={trackedSet.has(trackedKey(toISODate(row.game_date), row.batter, config.statType, row.primary_line ?? 0.5))}
-                        authHeaders={authHeaders}
-                      />
-                    </td>
+                    {[lowLine, highLine].map((l, i) => (
+                      <td key={i} style={{ padding: '8px 14px', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
+                        <TrackButton
+                          gameDate={toISODate(row.game_date)}
+                          batter={row.batter}
+                          playerName={row.player_name}
+                          teamAbbr={row.team_abbr}
+                          adjProb={adjProbForSide(probForLine(row, l.line), l.side)}
+                          trackedOdds={l.isPrimary && customNum != null ? customNum : l.odds}
+                          trackedEdge={l.isPrimary && customNum != null ? myEdge : l.edgeValue}
+                          statType={config.statType}
+                          line={l.line ?? (i === 0 ? 0.5 : 1.5)}
+                          side={l.side}
+                          isTracked={trackedSet.has(trackedKey(toISODate(row.game_date), row.batter, config.statType, l.line ?? (i === 0 ? 0.5 : 1.5)))}
+                          authHeaders={authHeaders}
+                        />
+                      </td>
+                    ))}
                   </tr>
                   {isExpanded && (
                     <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
@@ -757,39 +757,6 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
                               secondaryLine={row.secondary_line}
                             />
                           </div>
-
-                          {row._secondary.hasLine && (() => {
-                            const secEdge = edgeDisplay(row._secondary.edge, true);
-                            return (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                              <span style={{ ...LABEL, fontSize: '9px' }}>{`SECOND LINE (${row.secondary_line})`}</span>
-                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                <BookLogo book={row._secondary.book} size={14} />
-                                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--ev-dim)' }}>{sideLabel(secondarySide)}</span>
-                                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 600, color: 'var(--ev-blue)' }}>{fmtOdds(row._secondary.odds)}</span>
-                              </div>
-                              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: secEdge.color, fontWeight: secEdge.weight }}>
-                                {secEdge.text}
-                              </span>
-                              <span onClick={e => e.stopPropagation()} style={{ marginLeft: 'auto' }}>
-                                <TrackButton
-                                  gameDate={toISODate(row.game_date)}
-                                  batter={row.batter}
-                                  playerName={row.player_name}
-                                  teamAbbr={row.team_abbr}
-                                  adjProb={adjProbForSide(probForLine(row, row.secondary_line), secondarySide)}
-                                  trackedOdds={row._secondary.odds}
-                                  trackedEdge={row._secondary.edge}
-                                  statType={config.statType}
-                                  line={row.secondary_line ?? 1.5}
-                                  side={secondarySide}
-                                  isTracked={trackedSet.has(trackedKey(toISODate(row.game_date), row.batter, config.statType, row.secondary_line ?? 1.5))}
-                                  authHeaders={authHeaders}
-                                />
-                              </span>
-                            </div>
-                            );
-                          })()}
 
                           <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'rgba(255,255,255,0.3)', letterSpacing: '1px' }}>
                             {row.game_time && <span>{row.game_time}</span>}
@@ -838,17 +805,14 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
       <div className="mobile-card-list">
         {sorted.map(row => {
           const isExpanded = expanded === row.batter;
-          const { text: edgeText, color: edgeColor, weight: edgeWeight } = edgeDisplay(row._primary.edge, row._primary.hasLine);
-          const { text: edge2Text, color: edge2Color, weight: edge2Weight } = edgeDisplay(row._secondary.edge, row._secondary.hasLine);
           const books = row._books;
           const primarySide = row._primary.side;
           const secondarySide = row._secondary.side;
+          const [lowLine, highLine] = orderedLines(row, primarySide, secondarySide);
           const rawInput  = customOdds[row.batter] ?? '';
           const customNum = parseCustomOdds(rawInput);
           const myEdge     = customNum != null ? adjProbForSide(probForLine(row, row.primary_line), primarySide) - impliedFromAmerican(customNum) : null;
           const myEdgeDisp = edgeDisplay(myEdge, customNum != null);
-          const trackedOdds = customNum ?? row._primary.odds;
-          const trackedEdge = customNum != null ? myEdge : row._primary.edge;
 
           return (
             <Fragment key={`m-${row.game_pk}-${row.batter}`}>
@@ -878,7 +842,7 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
                   )}
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '14px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '20px', flexWrap: 'wrap', marginBottom: '8px' }}>
                   <div>
                     <div style={{ ...LABEL, fontSize: '9px', marginBottom: '3px' }}>{config.prob1Label}</div>
                     <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '17px', color: adjProbColor(row.p_stat_1plus ?? 0), lineHeight: 1 }}>
@@ -892,59 +856,67 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
                       {hasMarketModelDisagreement(row, config.statType) && <DisagreementBadge />}
                     </div>
                   </div>
-                  <div>
-                    <div style={{ ...LABEL, fontSize: '9px', marginBottom: '3px' }}>{`BOOK (${row.primary_line ?? '0.5'})`}</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      {row._primary.hasLine ? (
-                        <>
-                          <BookLogo book={row._primary.book} size={16} />
-                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--ev-dim)' }}>{sideLabel(primarySide)}</span>
-                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', fontWeight: 600, color: 'var(--ev-blue)' }}>{fmtOdds(row._primary.odds)}</span>
-                        </>
-                      ) : <span style={{ color: 'var(--ev-dim)', fontSize: '12px' }}>—</span>}
+                </div>
+
+                {[lowLine, highLine].map((l, i) => {
+                  const d = edgeDisplay(l.edgeValue, l.hasLine);
+                  return (
+                    <div key={i} style={{
+                      display: 'flex', alignItems: 'center', gap: '8px', padding: '7px 0',
+                      borderTop: i === 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                    }}>
+                      <span style={{ ...LABEL, fontSize: '9px', width: '24px', flexShrink: 0 }}>{l.line}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', minWidth: '90px' }}>
+                        {l.hasLine ? (
+                          <>
+                            <BookLogo book={l.book} size={16} />
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--ev-dim)' }}>{sideLabel(l.side)}</span>
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', fontWeight: 600, color: 'var(--ev-blue)' }}>{fmtOdds(l.odds)}</span>
+                          </>
+                        ) : <span style={{ color: 'var(--ev-dim)', fontSize: '12px' }}>—</span>}
+                      </div>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: d.color, fontWeight: d.weight }}>{d.text}</span>
+                      <div onClick={e => e.stopPropagation()} style={{ marginLeft: 'auto' }}>
+                        <TrackButton
+                          gameDate={toISODate(row.game_date)}
+                          batter={row.batter}
+                          playerName={row.player_name}
+                          teamAbbr={row.team_abbr}
+                          adjProb={adjProbForSide(probForLine(row, l.line), l.side)}
+                          trackedOdds={l.isPrimary && customNum != null ? customNum : l.odds}
+                          trackedEdge={l.isPrimary && customNum != null ? myEdge : l.edgeValue}
+                          statType={config.statType}
+                          line={l.line ?? (i === 0 ? 0.5 : 1.5)}
+                          side={l.side}
+                          isTracked={trackedSet.has(trackedKey(toISODate(row.game_date), row.batter, config.statType, l.line ?? (i === 0 ? 0.5 : 1.5)))}
+                          authHeaders={authHeaders}
+                        />
+                      </div>
                     </div>
-                  </div>
-                  <div>
-                    <div style={{ ...LABEL, fontSize: '9px', marginBottom: '3px' }}>EDGE</div>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '14px', color: edgeColor, fontWeight: edgeWeight }}>
-                      {edgeText}
-                    </div>
-                  </div>
-                  <div onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', justifyContent: 'flex-end' }}>
-                    <input
-                      type="text"
-                      placeholder="+350"
-                      value={rawInput}
-                      onChange={e => setCustomOdds(prev => ({ ...prev, [row.batter]: e.target.value }))}
-                      style={{
-                        width: '72px', background: 'rgba(255,255,255,0.06)',
-                        border: `1px solid ${customNum != null ? 'rgba(255,200,0,0.5)' : 'rgba(255,255,255,0.1)'}`,
-                        borderRadius: '4px',
-                        color: customNum != null ? 'var(--ev-gold)' : 'rgba(255,255,255,0.3)',
-                        fontFamily: 'var(--font-mono)', fontSize: '11px',
-                        padding: '4px 7px', textAlign: 'right', outline: 'none',
-                      }}
-                    />
-                    {customNum != null && (
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', color: myEdgeDisp.color, fontWeight: myEdgeDisp.weight }}>
-                        {myEdgeDisp.text}
-                      </span>
-                    )}
-                    <TrackButton
-                      gameDate={toISODate(row.game_date)}
-                      batter={row.batter}
-                      playerName={row.player_name}
-                      teamAbbr={row.team_abbr}
-                      adjProb={adjProbForSide(probForLine(row, row.primary_line), primarySide)}
-                      trackedOdds={trackedOdds}
-                      trackedEdge={trackedEdge}
-                      statType={config.statType}
-                      line={row.primary_line ?? 0.5}
-                      side={primarySide}
-                      isTracked={trackedSet.has(trackedKey(toISODate(row.game_date), row.batter, config.statType, row.primary_line ?? 0.5))}
-                      authHeaders={authHeaders}
-                    />
-                  </div>
+                  );
+                })}
+
+                <div onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingTop: '7px', marginTop: '2px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                  <span style={{ ...LABEL, fontSize: '9px' }}>MY LINE</span>
+                  <input
+                    type="text"
+                    placeholder="+350"
+                    value={rawInput}
+                    onChange={e => setCustomOdds(prev => ({ ...prev, [row.batter]: e.target.value }))}
+                    style={{
+                      width: '72px', background: 'rgba(255,255,255,0.06)',
+                      border: `1px solid ${customNum != null ? 'rgba(255,200,0,0.5)' : 'rgba(255,255,255,0.1)'}`,
+                      borderRadius: '4px',
+                      color: customNum != null ? 'var(--ev-gold)' : 'rgba(255,255,255,0.3)',
+                      fontFamily: 'var(--font-mono)', fontSize: '11px',
+                      padding: '4px 7px', textAlign: 'right', outline: 'none',
+                    }}
+                  />
+                  {customNum != null && (
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', color: myEdgeDisp.color, fontWeight: myEdgeDisp.weight }}>
+                      {myEdgeDisp.text}
+                    </span>
+                  )}
                 </div>
 
               </div>
@@ -959,34 +931,6 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
                     primaryLine={row.primary_line}
                     secondaryLine={row.secondary_line}
                   />
-
-                  {row._secondary.hasLine && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '12px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                      <div style={{ ...LABEL, fontSize: '9px' }}>{`SECOND LINE (${row.secondary_line})`}</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <BookLogo book={row._secondary.book} size={14} />
-                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--ev-dim)' }}>{sideLabel(secondarySide)}</span>
-                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 600, color: 'var(--ev-blue)' }}>{fmtOdds(row._secondary.odds)}</span>
-                      </div>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: edge2Color, fontWeight: edge2Weight }}>{edge2Text}</span>
-                      <div onClick={e => e.stopPropagation()} style={{ marginLeft: 'auto' }}>
-                        <TrackButton
-                          gameDate={toISODate(row.game_date)}
-                          batter={row.batter}
-                          playerName={row.player_name}
-                          teamAbbr={row.team_abbr}
-                          adjProb={adjProbForSide(probForLine(row, row.secondary_line), secondarySide)}
-                          trackedOdds={row._secondary.odds}
-                          trackedEdge={row._secondary.edge}
-                          statType={config.statType}
-                          line={row.secondary_line ?? 1.5}
-                          side={secondarySide}
-                          isTracked={trackedSet.has(trackedKey(toISODate(row.game_date), row.batter, config.statType, row.secondary_line ?? 1.5))}
-                          authHeaders={authHeaders}
-                        />
-                      </div>
-                    </div>
-                  )}
 
                   <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'rgba(255,255,255,0.3)', marginTop: '10px' }}>
                     {row.stadium && <span>{row.stadium}</span>}
