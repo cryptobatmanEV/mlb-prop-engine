@@ -215,57 +215,68 @@ function hasMarketModelDisagreement(row: PropRow & { _primary: LineDisplay }, st
   return modelProb != null && modelProb < 0.5;
 }
 
-// ── Market odds table (matches HR's DetailCard style: one row per book,
-// logo + name left, odds right, green for positive odds, muted white for
-// negative) -- shows EVERY available price (both sides, both lines) per
-// book, not just whichever side/line we've decided is "favored" elsewhere
-// in the UI. Users need the full picture to make their own call.
+// ── Market odds table: fixed 5-column layout (BOOK | O 0.5 | U 0.5 | O 1.5
+// | U 1.5) so every book lines up in the same columns regardless of which
+// lines that specific book happens to offer -- shows EVERY available price
+// (both sides, both lines) per book, not just whichever side/line we've
+// decided is "favored" elsewhere in the UI. Users need the full picture.
 function MarketOddsTable({ books, primaryLine, secondaryLine }: {
   books: BookMarkets; primaryLine: number | null; secondaryLine: number | null;
 }) {
-  const lines = [primaryLine, secondaryLine]
+  const [line1, line2] = [primaryLine, secondaryLine]
     .filter((l): l is number => l != null)
     .sort((a, b) => a - b);
 
-  const chipStyle = (odds: number): React.CSSProperties => ({
-    fontFamily: 'var(--font-mono)', fontSize: '11px', padding: '3px 7px', borderRadius: '3px',
-    background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-    color: odds > 0 ? 'var(--ev-green)' : 'rgba(255,255,255,0.85)', whiteSpace: 'nowrap',
-  });
+  const oddsColor = (odds: number | null): string =>
+    odds == null ? 'rgba(255,255,255,0.25)' : odds > 0 ? 'var(--ev-green)' : 'rgba(255,255,255,0.85)';
 
   const bookRows = Object.entries(books)
-    .map(([bk, bkLines]) => {
-      const chips: { key: string; label: string; odds: number }[] = [];
-      for (const line of lines) {
-        const sides = bkLines[String(line)];
-        if (!sides) continue;
-        if (sides.over != null)  chips.push({ key: `${line}-over`,  label: `O ${line}`, odds: sides.over });
-        if (sides.under != null) chips.push({ key: `${line}-under`, label: `U ${line}`, odds: sides.under });
-      }
-      return { bk, chips };
-    })
-    .filter(r => r.chips.length > 0);
+    .map(([bk, bkLines]) => ({
+      bk,
+      o1: line1 != null ? (bkLines[String(line1)]?.over ?? null) : null,
+      u1: line1 != null ? (bkLines[String(line1)]?.under ?? null) : null,
+      o2: line2 != null ? (bkLines[String(line2)]?.over ?? null) : null,
+      u2: line2 != null ? (bkLines[String(line2)]?.under ?? null) : null,
+    }))
+    .filter(r => r.o1 != null || r.u1 != null || r.o2 != null || r.u2 != null);
 
   if (bookRows.length === 0) {
     return <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'rgba(255,255,255,0.25)' }}>NO MARKET LINES YET</div>;
   }
 
+  const thStyle: React.CSSProperties = { textAlign: 'right', color: 'rgba(255,255,255,0.35)', fontSize: '9px', fontWeight: 400, padding: '0 0 6px' };
+  const tdStyle = (odds: number | null): React.CSSProperties => ({
+    textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '11px', padding: '7px 0', color: oddsColor(odds),
+  });
+
   return (
-    <div>
-      {bookRows.map(({ bk, chips }) => (
-        <div key={bk} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', padding: '7px 0', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'rgba(255,255,255,0.8)' }}>
-            <BookLogo book={bk} size={16} />
-            {bk}
-          </div>
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            {chips.map(c => (
-              <span key={c.key} style={chipStyle(c.odds)}>{c.label}: {fmtOdds(c.odds)}</span>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
+    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <thead>
+        <tr>
+          <th style={{ ...thStyle, textAlign: 'left' }}>BOOK</th>
+          {line1 != null && <th style={thStyle}>O {line1}</th>}
+          {line1 != null && <th style={thStyle}>U {line1}</th>}
+          {line2 != null && <th style={thStyle}>O {line2}</th>}
+          {line2 != null && <th style={thStyle}>U {line2}</th>}
+        </tr>
+      </thead>
+      <tbody>
+        {bookRows.map(r => (
+          <tr key={r.bk} style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+            <td style={{ padding: '7px 0', fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'rgba(255,255,255,0.8)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <BookLogo book={r.bk} size={16} />
+                {r.bk}
+              </div>
+            </td>
+            {line1 != null && <td style={tdStyle(r.o1)}>{r.o1 == null ? '—' : fmtOdds(r.o1)}</td>}
+            {line1 != null && <td style={tdStyle(r.u1)}>{r.u1 == null ? '—' : fmtOdds(r.u1)}</td>}
+            {line2 != null && <td style={tdStyle(r.o2)}>{r.o2 == null ? '—' : fmtOdds(r.o2)}</td>}
+            {line2 != null && <td style={tdStyle(r.u2)}>{r.u2 == null ? '—' : fmtOdds(r.u2)}</td>}
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
