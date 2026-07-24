@@ -446,6 +446,26 @@ function BatterAiPicks({ picks, config, gameDate, trackedSet, authHeaders }: {
 
 type EnrichedRow = PropRow & { _books: BookMarkets; _primary: LineDisplay; _secondary: LineDisplay };
 
+// Which line/side/edge to show in the "low" (0.5) vs "high" (1.5) position,
+// regardless of which one the model designates "primary" -- Total Bases'
+// primary line is 1.5, the reverse of Hits/Batter Ks, which meant the main
+// row's stacked BOOK column showed 1.5 above 0.5 for Total Bases only.
+// Always display numeric-ascending (0.5 first) instead.
+type OrderedLine = { line: number | null; side: 'over' | 'under'; hasLine: boolean; book: string | null; odds: number | null; edge: ReturnType<typeof edgeDisplay> };
+
+function orderedLines(row: EnrichedRow, primarySide: 'over' | 'under', secondarySide: 'over' | 'under'): [OrderedLine, OrderedLine] {
+  const primaryInfo: OrderedLine = {
+    line: row.primary_line, side: primarySide, hasLine: row._primary.hasLine,
+    book: row._primary.book, odds: row._primary.odds, edge: edgeDisplay(row._primary.edge, row._primary.hasLine),
+  };
+  const secondaryInfo: OrderedLine = {
+    line: row.secondary_line, side: secondarySide, hasLine: row._secondary.hasLine,
+    book: row._secondary.book, odds: row._secondary.odds, edge: edgeDisplay(row._secondary.edge, row._secondary.hasLine),
+  };
+  const primaryIsLower = (row.primary_line ?? 0.5) <= (row.secondary_line ?? 1.5);
+  return primaryIsLower ? [primaryInfo, secondaryInfo] : [secondaryInfo, primaryInfo];
+}
+
 export default function BatterPropsTable({ rows, config, aiPicks }: { rows: PropRow[]; config: PropConfig; aiPicks: AiPickRow[] }) {
   const [sortKey, setSortKey]   = useState<SortKey>('p_stat_1plus');
   const [sortDir, setSortDir]   = useState<SortDir>('desc');
@@ -515,6 +535,12 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
     else { setSortKey(key); setSortDir('desc'); }
   }
 
+  // Total Bases' primary line is 1.5 (the reverse of Hits/Batter Ks) --
+  // keep the sortable "primary_edge" key attached to whichever line it
+  // actually represents, but always position/label the columns in numeric
+  // (0.5, then 1.5) order so the header matches the row content below it.
+  const primaryIsLower = (rows[0]?.primary_line ?? 0.5) <= (rows[0]?.secondary_line ?? 1.5);
+
   const COLS: { key: SortKey | null; label: string; align: 'left' | 'right'; sticky?: boolean }[] = [
     { key: 'player_name', label: 'PLAYER', align: 'left', sticky: true },
     { key: null, label: 'BO', align: 'right' },
@@ -524,8 +550,8 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
     { key: 'p_stat_1plus', label: config.prob1Label, align: 'right' },
     { key: 'p_stat_2plus', label: config.prob2Label, align: 'right' },
     { key: null, label: 'BOOK', align: 'right' },
-    { key: 'primary_edge', label: `EDGE (${rows[0]?.primary_line ?? '0.5'})`, align: 'right' },
-    { key: null, label: `EDGE (${rows[0]?.secondary_line ?? '1.5'})`, align: 'right' },
+    { key: primaryIsLower ? 'primary_edge' : null, label: 'EDGE (0.5)', align: 'right' },
+    { key: primaryIsLower ? null : 'primary_edge', label: 'EDGE (1.5)', align: 'right' },
     { key: null, label: 'MY LINE', align: 'right' },
     { key: null, label: 'TRACK', align: 'right' },
   ];
@@ -619,11 +645,10 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
           <tbody>
             {sorted.map(row => {
               const isExpanded = expanded === row.batter;
-              const { text: edgeText, color: edgeColor, weight: edgeWeight } = edgeDisplay(row._primary.edge, row._primary.hasLine);
-              const { text: edge2Text, color: edge2Color, weight: edge2Weight } = edgeDisplay(row._secondary.edge, row._secondary.hasLine);
               const books = row._books;
               const primarySide = row._primary.side;
               const secondarySide = row._secondary.side;
+              const [lowLine, highLine] = orderedLines(row, primarySide, secondarySide);
               const rawInput  = customOdds[row.batter] ?? '';
               const customNum = parseCustomOdds(rawInput);
               const myEdge     = customNum != null ? adjProbForSide(probForLine(row, row.primary_line), primarySide) - impliedFromAmerican(customNum) : null;
@@ -657,33 +682,29 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
                       {hasMarketModelDisagreement(row, config.statType) && <DisagreementBadge />}
                     </td>
                     <td style={{ padding: '9px var(--cell-px)', textAlign: 'right' }}>
-                      <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                          {row._primary.hasLine ? (
-                            <>
-                              <BookLogo book={row._primary.book} size={13} />
-                              <span style={{ color: 'var(--ev-dim)', fontSize: '9px' }}>{sideLabel(primarySide)} {row.primary_line}</span>
-                              <span style={{ color: 'var(--ev-blue)', fontWeight: 600, fontSize: '12px' }}>{fmtOdds(row._primary.odds)}</span>
-                            </>
-                          ) : (
-                            <span style={{ color: 'var(--ev-dim)', fontSize: '10px' }}>{row.primary_line} —</span>
-                          )}
-                        </div>
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                          {row._secondary.hasLine ? (
-                            <>
-                              <BookLogo book={row._secondary.book} size={13} />
-                              <span style={{ color: 'var(--ev-dim)', fontSize: '9px' }}>{sideLabel(secondarySide)} {row.secondary_line}</span>
-                              <span style={{ color: 'var(--ev-blue)', fontWeight: 600, fontSize: '12px' }}>{fmtOdds(row._secondary.odds)}</span>
-                            </>
-                          ) : (
-                            <span style={{ color: 'var(--ev-dim)', fontSize: '10px' }}>{row.secondary_line} —</span>
-                          )}
-                        </div>
+                      <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: '5px' }}>
+                        {[lowLine, highLine].map((l, i) => (
+                          <div key={i} style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '5px',
+                            paddingTop: i === 1 ? '5px' : 0,
+                            borderTop: i === 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                            width: '100%', justifyContent: 'flex-end',
+                          }}>
+                            {l.hasLine ? (
+                              <>
+                                <BookLogo book={l.book} size={13} />
+                                <span style={{ color: 'var(--ev-dim)', fontSize: '9px' }}>{sideLabel(l.side)} {l.line}</span>
+                                <span style={{ color: 'var(--ev-blue)', fontWeight: 600, fontSize: '12px' }}>{fmtOdds(l.odds)}</span>
+                              </>
+                            ) : (
+                              <span style={{ color: 'var(--ev-dim)', fontSize: '10px' }}>{l.line} —</span>
+                            )}
+                          </div>
+                        ))}
                       </div>
                     </td>
-                    <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', color: edgeColor, fontWeight: edgeWeight }}>{edgeText}</td>
-                    <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', color: edge2Color, fontWeight: edge2Weight }}>{edge2Text}</td>
+                    <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', color: lowLine.edge.color, fontWeight: lowLine.edge.weight }}>{lowLine.edge.text}</td>
+                    <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', color: highLine.edge.color, fontWeight: highLine.edge.weight }}>{highLine.edge.text}</td>
                     <td style={{ padding: '8px 10px', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
                       <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
                         <input
