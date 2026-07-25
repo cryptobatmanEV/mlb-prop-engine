@@ -22,6 +22,16 @@ const STAT_CONFIG: Record<Exclude<StatType, 'hr'>, { table: string; config: Prop
   },
 };
 
+// The probability column that corresponds to each model's PRIMARY line --
+// 0.5 for Hits/Batter Ks (p_*_1plus), but 1.5 for Total Bases (p_*_2plus,
+// the reverse -- see predict/batter_props_fair_odds.py's LINE_ORDER). Used
+// to gate the header W-L record to "green zone" (>= 55%) primary-line plays.
+const PRIMARY_PROB_COL: Record<Exclude<StatType, 'hr'>, string> = {
+  hits: 'p_hits_1plus',
+  total_bases: 'p_total_bases_2plus',
+  batter_ks: 'p_batter_ks_1plus',
+};
+
 // ── Style tokens ───────────────────────────────────────────────────────────
 
 const LABEL: React.CSSProperties = {
@@ -72,6 +82,8 @@ export default async function Home({
   let aiPickRows:  AiPickRow[]   = [];
   let dbError:     string | null = null;
   let lastUpdated: string | null = null;
+  let wlWins       = 0;
+  let wlLosses     = 0;
 
   const isHrTab = stat === 'hr';
 
@@ -139,6 +151,12 @@ export default async function Home({
         // (batter) + ORDER BY batter, captured_at DESC keeps only each
         // player's most recent capture; the outer query re-sorts that
         // deduped set by composite_score for display.
+        //
+        // Hits/Batter Ks are capped at 8 -- Total Bases isn't, since its
+        // qualification threshold (P(2+ TB) > 0.50) already produces far
+        // fewer picks than the other two models (see
+        // scripts/log_ai_picks_total_bases.py).
+        const limitClause = stat === 'total_bases' ? '' : 'LIMIT 8';
         aiPickRows = await sql(
           `SELECT * FROM (
              SELECT DISTINCT ON (batter)
@@ -148,12 +166,30 @@ export default async function Home({
               WHERE game_date = $1::date
               ORDER BY batter, captured_at DESC
            ) latest
-           ORDER BY composite_score DESC`,
+           ORDER BY composite_score DESC
+           ${limitClause}`,
           [validDate],
         ) as unknown as AiPickRow[];
       } catch {
         aiPickRows = [];
       }
+
+      // Header W-L record: settled primary-line plays (result_hit_primary
+      // IS NOT NULL) restricted to "green zone" model confidence (>= 55%
+      // on whichever probability column matches this model's primary line).
+      const wl = await sql(
+        `SELECT
+           COUNT(*) FILTER (WHERE result_hit_primary = true)  AS wins,
+           COUNT(*) FILTER (WHERE result_hit_primary = false) AS losses
+         FROM ${table}
+         WHERE game_date = $1::date
+           AND result_hit_primary IS NOT NULL
+           AND ${PRIMARY_PROB_COL[stat]} >= 0.55`,
+        [validDate],
+      );
+      const wlRow = (wl as unknown as { wins: string; losses: string }[])[0];
+      wlWins   = wlRow ? Number(wlRow.wins) : 0;
+      wlLosses = wlRow ? Number(wlRow.losses) : 0;
     }
   } catch (err) {
     dbError = err instanceof Error ? err.message : String(err);
@@ -197,6 +233,13 @@ export default async function Home({
           {rowCount > 0 && (
             <div style={{ ...LABEL, color: 'var(--ev-dim)', marginTop: '4px', letterSpacing: '1px' }}>
               {rowCount} STARTERS &middot; {withLine} W/ LINES &middot; {posEdge} +EV
+              {!isHrTab && (wlWins + wlLosses) > 0 && (
+                <>
+                  {' '}&middot;{' '}
+                  <span style={{ color: 'var(--ev-text)' }}>W {wlWins} L {wlLosses}</span>
+                  {' '}({(wlWins / (wlWins + wlLosses) * 100).toFixed(1)}%)
+                </>
+              )}
             </div>
           )}
         </header>

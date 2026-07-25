@@ -1,7 +1,7 @@
 """
 AI PICKS for the Total Bases model.
 
-Qualification: P(2+ TB) > 0.55, best_odds <= +300, bat_order <= 6.
+Qualification: P(2+ TB) > 0.50, best_odds <= +300, bat_order <= 6.
 Composite score: p_tb_2plus*5 + (xslg_15-0.400)*4 + (barrel_pct_15-0.08)*3 + bat_order_bonus
 
 NOTE: the qualifying/scored probability is p_tb_2plus, which is the PRIMARY
@@ -28,7 +28,7 @@ import pandas as pd
 from scripts.shared_ai_picks import bat_order_bonus, write_picks, now_utc, _f, _i, _s
 
 TABLE = 'total_bases_ai_picks_log'
-MIN_ADJ_PROB = 0.55
+MIN_ADJ_PROB = 0.50
 MAX_ODDS = 300
 MAX_BAT_ORDER = 6
 
