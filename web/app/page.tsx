@@ -10,15 +10,15 @@ export const dynamic = 'force-dynamic';
 const STAT_CONFIG: Record<Exclude<StatType, 'hr'>, { table: string; config: PropConfig }> = {
   hits: {
     table: 'hits_predictions',
-    config: { label: 'Hits', prob1Label: 'P(1+ H)', prob2Label: 'P(2+ H)', projLabel: 'PROJ HITS', statType: 'hits' },
+    config: { label: 'Hits', prob1Label: 'P(1+ H)', prob2Label: 'P(2+ H)', projLabel: 'PROJ HITS', statType: 'hits', resultAbbr: 'H' },
   },
   total_bases: {
     table: 'total_bases_predictions',
-    config: { label: 'Total Bases', prob1Label: 'P(1+ TB)', prob2Label: 'P(2+ TB)', projLabel: 'PROJ TB', statType: 'total_bases' },
+    config: { label: 'Total Bases', prob1Label: 'P(1+ TB)', prob2Label: 'P(2+ TB)', projLabel: 'PROJ TB', statType: 'total_bases', resultAbbr: 'TB' },
   },
   batter_ks: {
     table: 'batter_ks_predictions',
-    config: { label: 'Strikeouts', prob1Label: 'P(0.5+ K)', prob2Label: 'P(1.5+ K)', projLabel: 'PROJ K', statType: 'batter_ks' },
+    config: { label: 'Strikeouts', prob1Label: 'P(0.5+ K)', prob2Label: 'P(1.5+ K)', projLabel: 'PROJ K', statType: 'batter_ks', resultAbbr: 'K' },
   },
 };
 
@@ -109,7 +109,7 @@ export default async function Home({
            bat_order, is_home, game_time, stadium, pitcher_name, p_throws,
            adj_prob, primary_line, primary_has_line, primary_side, primary_best_book, primary_best_odds, primary_edge,
            secondary_line, secondary_has_line, secondary_side, secondary_best_book, secondary_best_odds, secondary_edge,
-           book_markets,
+           book_markets, result_actual, result_hit_primary, result_hit_secondary,
            pred_${statPrefix} AS pred_stat,
            p_${statPrefix}_1plus AS p_stat_1plus,
            p_${statPrefix}_2plus AS p_stat_2plus

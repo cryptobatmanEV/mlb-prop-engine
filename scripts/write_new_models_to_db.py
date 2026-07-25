@@ -161,13 +161,18 @@ def _upsert_sql(table, stat_prefix):
     val_list = ', '.join(f'%({c})s' for c in _ROW_COLS)
     update_list = ', '.join(
         f'{rc} = EXCLUDED.{rc}' for rc, c in zip(real_cols, _ROW_COLS)
-        if c not in ('game_date', 'batter', 'game_pk')
+        if c not in ('game_date', 'batter', 'game_pk', 'bat_order')
+    )
+    bat_order_clause = (
+        f'bat_order = CASE WHEN EXCLUDED.bat_order IS NOT NULL '
+        f'THEN EXCLUDED.bat_order ELSE {table}.bat_order END'
     )
     return f"""
     INSERT INTO {table} ({col_list})
     VALUES ({val_list})
     ON CONFLICT (game_date, batter, game_pk) DO UPDATE SET
         {update_list},
+        {bat_order_clause},
         created_at = NOW();
     """
 
