@@ -1,6 +1,6 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 function addDays(dateStr: string, n: number): string {
   const d = new Date(dateStr + 'T12:00:00Z');
@@ -31,13 +31,25 @@ const BTN: React.CSSProperties = {
 
 export default function DateNav({ date, today }: { date: string; today: string }) {
   const router  = useRouter();
+  const searchParams = useSearchParams();
   const prev    = addDays(date, -1);
   const next    = addDays(date, +1);
   const isToday = date >= today;
 
+  // Preserve every other query param (chiefly stat=) when only the date
+  // changes -- a plain `/?date=...` push previously dropped stat= and
+  // silently reset the view to Home Runs on every PREV/NEXT/TODAY click.
+  function hrefFor(newDate: string | null): string {
+    const params = new URLSearchParams(searchParams.toString());
+    if (newDate) params.set('date', newDate);
+    else params.delete('date');
+    const qs = params.toString();
+    return qs ? `/?${qs}` : '/';
+  }
+
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-      <button style={BTN} onClick={() => router.push(`/?date=${prev}`)}>
+      <button style={BTN} onClick={() => router.push(hrefFor(prev))}>
         ← PREV
       </button>
 
@@ -54,7 +66,7 @@ export default function DateNav({ date, today }: { date: string; today: string }
 
       <button
         style={{ ...BTN, opacity: isToday ? 0.3 : 1, cursor: isToday ? 'default' : 'pointer' }}
-        onClick={() => { if (!isToday) router.push(`/?date=${next}`); }}
+        onClick={() => { if (!isToday) router.push(hrefFor(next)); }}
         disabled={isToday}
       >
         NEXT →
@@ -63,7 +75,7 @@ export default function DateNav({ date, today }: { date: string; today: string }
       {date !== today && (
         <button
           style={{ ...BTN, color: 'var(--ev-green)', borderColor: 'var(--ev-green)' }}
-          onClick={() => router.push('/')}
+          onClick={() => router.push(hrefFor(null))}
         >
           TODAY
         </button>

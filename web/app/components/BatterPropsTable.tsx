@@ -841,7 +841,14 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
                       <td colSpan={COLS.length} style={{ padding: 0 }}>
                         <div style={{ padding: '16px', background: 'rgba(255,255,255,0.012)', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                           <div style={{ background: '#111416', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', padding: '10px 12px' }}>
-                            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '2px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', marginBottom: '8px' }}>MARKET ODDS (ALL BOOKS)</div>
+                            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '2px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', marginBottom: '8px' }}>
+                              MARKET ODDS (ALL BOOKS)
+                              {config.statType === 'total_bases' && row.secondary_is_hits_fallback && (
+                                <span style={{ textTransform: 'none', letterSpacing: 'normal', color: 'rgba(255,255,255,0.3)', marginLeft: '8px' }}>
+                                  — 0.5 column shows Hits odds, no 0.5 Total Bases market available
+                                </span>
+                              )}
+                            </div>
                             <MarketOddsTable
                               books={books}
                               primaryLine={row.primary_line}
@@ -1018,6 +1025,11 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
                 <div style={{ margin: '-2px 0 12px', padding: '12px', background: 'rgba(255,255,255,0.012)', border: '1px solid rgba(255,255,255,0.06)', borderTop: 'none', borderRadius: '0 0 4px 4px' }}>
                   <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '2px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', marginBottom: '8px' }}>
                     MARKET ODDS (ALL BOOKS)
+                    {config.statType === 'total_bases' && row.secondary_is_hits_fallback && (
+                      <span style={{ textTransform: 'none', letterSpacing: 'normal', color: 'rgba(255,255,255,0.3)', marginLeft: '8px' }}>
+                        — 0.5 column shows Hits odds, no 0.5 Total Bases market available
+                      </span>
+                    )}
                   </div>
                   <MarketOddsTable
                     books={books}

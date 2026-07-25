@@ -7,6 +7,8 @@ Usage:
     python predict/batter_props_fair_odds.py              # today
     python predict/batter_props_fair_odds.py 2026-06-07   # specific date
 """
+import json
+import math
 import os
 import sys
 from datetime import date
@@ -64,6 +66,12 @@ def _fill_total_bases_hits_fallback(priced, hits_all_df):
     silently corrupt all of that for just these rows. The UI's "0.5" column
     for Total Bases already reads from secondary_* (see BatterPropsTable.tsx
     orderedLines()), so that's the field this fallback needs to fill.
+
+    Also merges EVERY book's 0.5 Hits price (not just the single best one)
+    into the row's own book_markets JSON, so the "MARKET ODDS (ALL BOOKS)"
+    dropdown shows every available price instead of just the one number
+    used in the summary row -- fills in as many gaps as possible, not the
+    minimum needed for the headline number.
     """
     priced = priced.copy()
     priced['secondary_is_hits_fallback'] = False
@@ -77,6 +85,7 @@ def _fill_total_bases_hits_fallback(priced, hits_all_df):
     name_norm = priced['player_name'].apply(norm_name)
     over_best  = {r['name_norm']: r for _, r in _best_side_per_player(hits_all_df, 0.5, 'over').iterrows()}
     under_best = {r['name_norm']: r for _, r in _best_side_per_player(hits_all_df, 0.5, 'under').iterrows()}
+    hits_05_by_player = {nn: grp for nn, grp in hits_all_df[hits_all_df['line'] == 0.5].groupby('name_norm')}
 
     filled = 0
     for idx in missing_idx:
@@ -106,6 +115,27 @@ def _fill_total_bases_hits_fallback(priced, hits_all_df):
         priced.at[idx, 'secondary_has_line']           = True
         priced.at[idx, 'secondary_edge']               = edge
         priced.at[idx, 'secondary_is_hits_fallback']   = True
+
+        player_hits_rows = hits_05_by_player.get(nn)
+        if player_hits_rows is not None:
+            raw = priced.at[idx, 'book_markets']
+            books = json.loads(raw) if isinstance(raw, str) and raw else {}
+            def _valid_odds(v):
+                return v is not None and not (isinstance(v, float) and math.isnan(v))
+
+            for _, hr in player_hits_rows.iterrows():
+                bk = str(hr.get('bookmaker', '')).lower().strip()
+                if not bk:
+                    continue
+                sides = {}
+                if _valid_odds(hr.get('over_odds')):
+                    sides['over'] = int(hr['over_odds'])
+                if _valid_odds(hr.get('under_odds')):
+                    sides['under'] = int(hr['under_odds'])
+                if sides:
+                    books.setdefault(bk, {})['0.5'] = sides
+            priced.at[idx, 'book_markets'] = json.dumps(books)
+
         filled += 1
 
     if filled:
