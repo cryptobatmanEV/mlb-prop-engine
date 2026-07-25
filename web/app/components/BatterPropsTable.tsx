@@ -287,9 +287,13 @@ function MarketOddsTable({ books, primaryLine, secondaryLine }: {
 // ── Actual result badge (past dates only -- appears once results_log grading
 // has run, next morning) -- next to the player name so a settled slate reads
 // at a glance without opening the expanded row.
-function ResultBadge({ actual, hitPrimary, abbr }: { actual: number | null; hitPrimary: boolean | null; abbr: string }) {
+// Graded against "did they record at least 1" (actual > 0), not whichever
+// line a given model calls "primary" -- Total Bases' primary line is 1.5,
+// which made a 1-total-base single (a normal, positive outcome) read as a
+// loss. This keeps the badge's win/loss bar consistent across all 3 tabs.
+function ResultBadge({ actual, abbr }: { actual: number | null; abbr: string }) {
   if (actual == null) return null;
-  const color = hitPrimary ? 'var(--ev-green)' : 'var(--ev-red)';
+  const color = actual > 0 ? 'var(--ev-green)' : 'var(--ev-red)';
   return (
     <span style={{
       marginLeft: '8px', fontFamily: 'var(--font-mono)', fontSize: '10px', fontWeight: 700,
@@ -702,7 +706,7 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
                     }}>
                       <span style={{ display: 'inline-block', marginRight: '6px', fontSize: '9px', color: isExpanded ? 'var(--ev-green)' : 'var(--ev-dim)', transition: 'transform 0.15s', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
                       {row.player_name}
-                      <ResultBadge actual={row.result_actual} hitPrimary={row.result_hit_primary} abbr={config.resultAbbr} />
+                      <ResultBadge actual={row.result_actual} abbr={config.resultAbbr} />
                     </td>
                     <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', color: 'var(--ev-dim)', fontSize: '11px' }}>{row.bat_order ?? '—'}</td>
                     <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', fontSize: '11px', color: row.is_home === '1' || row.is_home === 'True' ? 'var(--ev-green)' : 'var(--ev-muted)' }}>
@@ -861,7 +865,7 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
                   <div>
                     <div style={{ fontFamily: 'var(--font-syne)', fontWeight: 800, fontSize: '15px', color: 'rgba(255,255,255,0.95)' }}>
                       {row.player_name}
-                      <ResultBadge actual={row.result_actual} hitPrimary={row.result_hit_primary} abbr={config.resultAbbr} />
+                      <ResultBadge actual={row.result_actual} abbr={config.resultAbbr} />
                     </div>
                     <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>
                       {row.team_abbr} {row.is_home === '1' || row.is_home === 'True' ? 'vs' : '@'} {row.pitcher_name ?? 'TBD'}
