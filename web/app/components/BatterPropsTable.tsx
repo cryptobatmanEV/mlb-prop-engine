@@ -580,16 +580,17 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
   // (0.5, then 1.5) order so the header matches the row content below it.
   const primaryIsLower = (rows[0]?.primary_line ?? 0.5) <= (rows[0]?.secondary_line ?? 1.5);
 
-  // 10 columns so the desktop table fits one 1440px viewport without
-  // horizontal scroll -- H/A and P(2+) dropped (P(2+) still surfaces via the
-  // disagreement badge and the mobile card view), and each line's edge is
-  // stacked into that line's own BOOK cell instead of a separate column.
+  // 11 columns so the desktop table still fits a 1440px viewport without
+  // horizontal scroll -- H/A stays dropped, but P(2+) is back (both
+  // probability columns must show); each line's edge remains stacked into
+  // that line's own BOOK cell instead of a separate column.
   const COLS: { key: SortKey | null; label: string; align: 'left' | 'right'; sticky?: boolean }[] = [
     { key: 'player_name', label: 'PLAYER', align: 'left', sticky: true },
     { key: null, label: 'BO', align: 'right' },
     { key: null, label: 'TEAM', align: 'left' },
     { key: null, label: 'VS', align: 'left' },
     { key: 'p_stat_1plus', label: config.prob1Label, align: 'right' },
+    { key: 'p_stat_2plus', label: config.prob2Label, align: 'right' },
     { key: primaryIsLower ? 'primary_edge' : null, label: '0.5', align: 'right' },
     { key: primaryIsLower ? null : 'primary_edge', label: '1.5', align: 'right' },
     { key: null, label: 'MY LINE', align: 'right' },
@@ -715,6 +716,9 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
                     </td>
                     <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', fontWeight: 700, fontSize: '13px', color: adjProbColor(row.p_stat_1plus ?? 0) }}>
                       {fmtProb(row.p_stat_1plus)}
+                    </td>
+                    <td style={{ padding: '9px var(--cell-px)', textAlign: 'right', color: 'var(--ev-muted)' }}>
+                      {fmtProb(row.p_stat_2plus)}
                       {hasMarketModelDisagreement(row, config.statType) && <DisagreementBadge />}
                     </td>
                     {[lowLine, highLine].map((l, i) => {
