@@ -74,6 +74,7 @@ export type PropRow = {
   secondary_best_book: string | null;
   secondary_best_odds: number | null;
   secondary_edge: number | null;
+  secondary_is_hits_fallback: boolean | null;  // Total Bases only -- secondary (0.5) odds borrowed from the 0.5 Hits line
   book_markets: string | null;
   result_actual: number | null;
   result_hit_primary: boolean | null;
@@ -319,6 +320,39 @@ function DisagreementBadge() {
   );
 }
 
+// ── Total Bases' 0.5 column: hits-line fallback indicators ─────────────────
+// Most books skip pricing "1+ total base" (0.5 TB) for anyone who isn't a
+// fringe hitter; TB >= 1 iff hits >= 1 exactly, so predict/batter_props_fair_odds.py
+// substitutes that player's 0.5 Hits line when no 0.5 TB line exists. These
+// two indicators only ever render on the Total Bases tab.
+function FallbackInfoIcon() {
+  return (
+    <span
+      title="When no 0.5 Total Bases line is available, we show the 0.5 Hits line instead. At this line level both props have nearly identical outcomes — walks are not counted as total bases by sportsbooks."
+      style={{
+        marginLeft: '4px', fontSize: '10px', color: 'var(--ev-dim)', cursor: 'help',
+        display: 'inline-block', verticalAlign: 'middle',
+      }}
+    >
+      ⓘ
+    </span>
+  );
+}
+
+function FallbackBadge() {
+  return (
+    <span
+      title="Odds shown are the 0.5 Hits line, not a 0.5 Total Bases line"
+      style={{
+        marginLeft: '3px', fontSize: '8px', color: 'rgba(255,255,255,0.4)',
+        verticalAlign: 'super', cursor: 'help',
+      }}
+    >
+      H
+    </span>
+  );
+}
+
 // ── MY LINE (custom odds) ───────────────────────────────────────────────────
 function parseCustomOdds(raw: string): number | null {
   const stripped = raw.trim().replace(/^\+/, '');
@@ -489,17 +523,19 @@ type EnrichedRow = PropRow & { _books: BookMarkets; _primary: LineDisplay; _seco
 // Always display numeric-ascending (0.5 first) instead.
 type OrderedLine = {
   line: number | null; side: 'over' | 'under'; hasLine: boolean; book: string | null;
-  odds: number | null; edgeValue: number | null; isPrimary: boolean;
+  odds: number | null; edgeValue: number | null; isPrimary: boolean; isHitsFallback: boolean;
 };
 
 function orderedLines(row: EnrichedRow, primarySide: 'over' | 'under', secondarySide: 'over' | 'under'): [OrderedLine, OrderedLine] {
   const primaryInfo: OrderedLine = {
     line: row.primary_line, side: primarySide, hasLine: row._primary.hasLine,
     book: row._primary.book, odds: row._primary.odds, edgeValue: row._primary.edge, isPrimary: true,
+    isHitsFallback: false,
   };
   const secondaryInfo: OrderedLine = {
     line: row.secondary_line, side: secondarySide, hasLine: row._secondary.hasLine,
     book: row._secondary.book, odds: row._secondary.odds, edgeValue: row._secondary.edge, isPrimary: false,
+    isHitsFallback: row.secondary_is_hits_fallback ?? false,
   };
   const primaryIsLower = (row.primary_line ?? 0.5) <= (row.secondary_line ?? 1.5);
   return primaryIsLower ? [primaryInfo, secondaryInfo] : [secondaryInfo, primaryInfo];
@@ -520,7 +556,23 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
   const enriched: EnrichedRow[] = useMemo(() => rows.map(row => {
     const books = parseBookMarkets(row.book_markets);
     const primary = computeLineDisplay(books, row.primary_line, probForLine(row, row.primary_line));
-    const secondary = computeLineDisplay(books, row.secondary_line, probForLine(row, row.secondary_line));
+    let secondary = computeLineDisplay(books, row.secondary_line, probForLine(row, row.secondary_line));
+    // Total Bases' hits-line fallback (predict/batter_props_fair_odds.py's
+    // _fill_total_bases_hits_fallback) fills secondary_best_book/odds from
+    // the player's 0.5 Hits line, NOT from book_markets -- book_markets only
+    // ever holds real Total Bases prices, so computeLineDisplay() above
+    // finds nothing there and reports hasLine=false even though the row
+    // does carry usable fallback odds. Build the display directly from
+    // those row fields in that one case.
+    if (!secondary.hasLine && row.secondary_is_hits_fallback && row.secondary_best_odds != null) {
+      const side: 'over' | 'under' = row.secondary_side === 'under' ? 'under' : 'over';
+      const prob = probForLine(row, row.secondary_line);
+      const sideProb = prob != null ? (side === 'under' ? 1 - prob : prob) : null;
+      const edge = sideProb != null
+        ? Math.round((sideProb - impliedFromAmerican(row.secondary_best_odds)) * 10000) / 10000
+        : null;
+      secondary = { side, book: row.secondary_best_book, odds: row.secondary_best_odds, hasLine: true, edge };
+    }
     return { ...row, _books: books, _primary: primary, _secondary: secondary };
   }), [rows]);
 
@@ -678,6 +730,7 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
                       ...(col.sticky ? { position: 'sticky', left: 0, zIndex: 2, background: STICKY_BG, borderRight: '1px solid var(--ev-border)' } : {}),
                     }}>
                     {col.label}
+                    {config.statType === 'total_bases' && col.label === '0.5' && <FallbackInfoIcon />}
                     {isActive && <span style={{ marginLeft: '4px', fontSize: '9px', color: 'var(--ev-green)' }}>{sortDir === 'desc' ? '▼' : '▲'}</span>}
                   </th>
                 );
@@ -731,6 +784,7 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
                                 <BookLogo book={l.book} size={14} />
                                 <span style={{ color: 'var(--ev-dim)', fontSize: '9px' }}>{sideLabel(l.side)}</span>
                                 <span style={{ color: 'var(--ev-blue)', fontWeight: 600, fontSize: '12px' }}>{fmtOdds(l.odds)}</span>
+                                {l.isHitsFallback && <FallbackBadge />}
                               </div>
                               <span style={{ fontSize: '10px', color: d.color, fontWeight: d.weight }}>{d.text}</span>
                             </div>
@@ -910,6 +964,7 @@ export default function BatterPropsTable({ rows, config, aiPicks }: { rows: Prop
                             <BookLogo book={l.book} size={16} />
                             <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--ev-dim)' }}>{sideLabel(l.side)}</span>
                             <span style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', fontWeight: 600, color: 'var(--ev-blue)' }}>{fmtOdds(l.odds)}</span>
+                            {l.isHitsFallback && <FallbackBadge />}
                           </>
                         ) : <span style={{ color: 'var(--ev-dim)', fontSize: '12px' }}>—</span>}
                       </div>

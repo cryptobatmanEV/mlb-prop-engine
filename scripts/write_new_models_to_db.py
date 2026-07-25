@@ -12,7 +12,7 @@ Each table gets:
   primary_line, primary_has_line, primary_best_book, primary_best_odds,
     primary_book_implied, primary_edge,
   secondary_line, secondary_has_line, secondary_best_book, secondary_best_odds,
-    secondary_book_implied, secondary_edge,
+    secondary_book_implied, secondary_edge, secondary_is_hits_fallback,
   pp_line, pp_side, edge_pp, ud_line, ud_side, edge_ud,
   book_markets, result_actual, result_hit_primary, result_hit_secondary,
   created_at
@@ -95,6 +95,7 @@ def _ddl(table, stat_prefix):
         secondary_best_odds     INTEGER,
         secondary_book_implied  FLOAT,
         secondary_edge          FLOAT,
+        secondary_is_hits_fallback BOOLEAN DEFAULT FALSE,
 
         pp_line                 FLOAT,
         pp_side                 TEXT,
@@ -141,7 +142,7 @@ _ROW_COLS = [
     'primary_line', 'primary_has_line', 'primary_side', 'primary_best_book', 'primary_best_odds',
     'primary_book_implied', 'primary_edge',
     'secondary_line', 'secondary_has_line', 'secondary_side', 'secondary_best_book', 'secondary_best_odds',
-    'secondary_book_implied', 'secondary_edge',
+    'secondary_book_implied', 'secondary_edge', 'secondary_is_hits_fallback',
     'pp_line', 'pp_side', 'edge_pp', 'ud_line', 'ud_side', 'edge_ud',
     'book_markets',
 ]
@@ -149,6 +150,11 @@ _ROW_COLS = [
 _MIGRATIONS = [
     "ALTER TABLE {t} ADD COLUMN IF NOT EXISTS primary_side TEXT",
     "ALTER TABLE {t} ADD COLUMN IF NOT EXISTS secondary_side TEXT",
+    # Total Bases only in practice (see predict/batter_props_fair_odds.py's
+    # _fill_total_bases_hits_fallback) -- added to all 3 tables here since
+    # this migration list runs generically per-table, but harmlessly stays
+    # FALSE on hits_predictions/batter_ks_predictions, which never set it.
+    "ALTER TABLE {t} ADD COLUMN IF NOT EXISTS secondary_is_hits_fallback BOOLEAN DEFAULT FALSE",
 ]
 
 
