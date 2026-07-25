@@ -63,11 +63,11 @@ def log_results_only(date_str=None):
 
     from scripts.shared_log_results import run as shared_run
     _run_step("Hits results", shared_run, 'hits', 'hits_predictions', 'hits_ai_picks_log',
-              'hits', 0.5, 1.5, date_str)
+              'hits', date_str)
     _run_step("Total Bases results", shared_run, 'total_bases', 'total_bases_predictions',
-              'total_bases_ai_picks_log', 'totalBases', 0.5, 1.5, date_str)
+              'total_bases_ai_picks_log', 'totalBases', date_str)
     _run_step("Batter Ks results", shared_run, 'batter_ks', 'batter_ks_predictions',
-              'batter_ks_ai_picks_log', 'strikeOuts', 0.5, 1.5, date_str)
+              'batter_ks_ai_picks_log', 'strikeOuts', date_str)
 
 
 def run(date_str=None):

@@ -5,7 +5,9 @@ Usage:
     python scripts/log_results_batter_ks.py              # yesterday
     python scripts/log_results_batter_ks.py 2026-06-07   # specific date
 
-Line semantics: primary=0.5 (1+ Ks), secondary=1.5 (2+ Ks).
+Line semantics: primary=0.5 (1+ Ks), secondary=1.5 (2+ Ks) -- graded against
+each row's own primary_line/secondary_line columns, not hardcoded here (see
+scripts/shared_log_results.py).
 """
 import os
 import sys
@@ -22,7 +24,5 @@ if __name__ == '__main__':
         table='batter_ks_predictions',
         ai_picks_table='batter_ks_ai_picks_log',
         stat_field='strikeOuts',
-        primary_line=0.5,
-        secondary_line=1.5,
         date_str=date_arg,
     )

@@ -5,8 +5,10 @@ Usage:
     python scripts/log_results_total_bases.py              # yesterday
     python scripts/log_results_total_bases.py 2026-06-07   # specific date
 
-Line semantics: primary=0.5 (1+ TB), secondary=1.5 (2+ TB) -- matches the
-real ParlayAPI market lines (see predict/shared_parlay.py notes).
+Line semantics: primary=1.5 (2+ TB), secondary=0.5 (1+ TB) -- the reverse of
+Hits/Batter Ks (see predict/batter_props_fair_odds.py's LINE_ORDER). Graded
+against each row's own primary_line/secondary_line columns, not hardcoded
+here (see scripts/shared_log_results.py).
 """
 import os
 import sys
@@ -23,7 +25,5 @@ if __name__ == '__main__':
         table='total_bases_predictions',
         ai_picks_table='total_bases_ai_picks_log',
         stat_field='totalBases',
-        primary_line=0.5,
-        secondary_line=1.5,
         date_str=date_arg,
     )

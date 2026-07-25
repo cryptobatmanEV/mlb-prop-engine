@@ -66,7 +66,14 @@ def fetch_actual_stat(game_pks, stat_field):
     return values
 
 
-def grade_predictions_table(table, date_str, actual_by_batter, primary_line, secondary_line):
+def grade_predictions_table(table, date_str, actual_by_batter):
+    """
+    Grades against each row's OWN primary_line/secondary_line columns, not a
+    caller-supplied constant -- Total Bases' primary line (1.5) is the
+    reverse of Hits/Batter Ks' (0.5) (see predict/batter_props_fair_odds.py's
+    LINE_ORDER), so a single hardcoded pair of thresholds silently mis-grades
+    whichever model doesn't match it.
+    """
     if not DATABASE_URL or not actual_by_batter:
         return
     conn = psycopg2.connect(DATABASE_URL)
@@ -78,11 +85,11 @@ def grade_predictions_table(table, date_str, actual_by_batter, primary_line, sec
                         f"""
                         UPDATE {table}
                            SET result_actual        = %s,
-                               result_hit_primary    = %s,
-                               result_hit_secondary  = %s
+                               result_hit_primary    = (%s > primary_line),
+                               result_hit_secondary  = (%s > secondary_line)
                          WHERE game_date = %s AND batter = %s
                         """,
-                        (actual, actual > primary_line, actual > secondary_line, date_str, batter_id),
+                        (actual, actual, actual, date_str, batter_id),
                     )
         print(f"  Updated {len(actual_by_batter)} row(s) in {table}.")
     finally:
@@ -180,7 +187,7 @@ def already_logged(log_path, date_str):
     return str(date_str) in existing['game_date'].astype(str).values
 
 
-def run(model_key, table, ai_picks_table, stat_field, primary_line, secondary_line, date_str=None):
+def run(model_key, table, ai_picks_table, stat_field, date_str=None):
     """
     model_key: 'hits' | 'total_bases' | 'batter_ks' -- matches both the
       {model_key}_fair_odds_{date}.csv filename and the tracked_bets.stat_type
@@ -213,14 +220,14 @@ def run(model_key, table, ai_picks_table, stat_field, primary_line, secondary_li
         return
     print(f"  Results retrieved for {len(actual)} player(s).")
 
-    grade_predictions_table(table, date_str, actual, primary_line, secondary_line)
+    grade_predictions_table(table, date_str, actual)
     backfill_tracked_bets(model_key, date_str, actual)
     grade_ai_picks_log(ai_picks_table, date_str, actual)
 
     rows = pred_df[pred_df['batter'].isin(actual.keys())].copy()
     rows['actual'] = rows['batter'].map(actual)
-    rows['hit_primary'] = rows['actual'] > primary_line
-    rows['hit_secondary'] = rows['actual'] > secondary_line
+    rows['hit_primary'] = rows['actual'] > rows['primary_line']
+    rows['hit_secondary'] = rows['actual'] > rows['secondary_line']
     rows['log_date'] = date_cls.today().isoformat()
 
     os.makedirs('data/logs', exist_ok=True)
@@ -233,4 +240,5 @@ def run(model_key, table, ai_picks_table, stat_field, primary_line, secondary_li
     print(f"  Appended {len(rows)} row(s) to {log_path} ({len(out)} total).")
 
     n_hit_primary = rows['hit_primary'].sum()
+    primary_line = rows['primary_line'].iloc[0] if not rows.empty else '?'
     print(f"\n  {model_key}: {len(rows)} graded, {n_hit_primary} hit the primary line ({primary_line}+).")
