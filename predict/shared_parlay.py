@@ -59,7 +59,15 @@ def american_to_implied(odds):
 def norm_name(name):
     name = unicodedata.normalize('NFKD', str(name))
     name = ''.join(c for c in name if not unicodedata.combining(c))
-    return re.sub(r'[^a-z ]', '', name.lower().strip())
+    name = re.sub(r'[^a-z ]', '', name.lower().strip())
+    # ParlayAPI is inconsistent about including generational suffixes --
+    # varies by BOOK and by MARKET for the same player (e.g. "Fernando
+    # Tatis Jr." on some player_hits rows but plain "Fernando Tatis" on
+    # every player_strikeouts row), while our DB's player_name always
+    # keeps the suffix (MLB Stats API roster data). Stripping it from
+    # both sides (this function normalizes both our names and the API's)
+    # collapses either variant to the same join key.
+    return re.sub(r'\s+(jr|sr|ii|iii|iv)$', '', name).strip()
 
 
 def _fetch_fanduel_tb_alt_as_over_1_5(window_start, window_end):
