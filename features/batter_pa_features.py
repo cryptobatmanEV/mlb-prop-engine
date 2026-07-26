@@ -50,6 +50,8 @@ def build():
     df['is_hbp']      = (df['events'] == 'hit_by_pitch').astype(int)
     df['is_sf']       = df['events'].isin(SF_EVENTS).astype(int)
     df['is_k']        = df['events'].isin(K_EVENTS).astype(int)
+    # Total bases = singles*1 + doubles*2 + triples*3 + HR*4
+    # Walks (bb), HBP, and SF are NOT included — matches sportsbook prop definitions
     df['total_bases'] = df['is_single'] + 2*df['is_double'] + 3*df['is_triple'] + 4*df['is_hr']
 
     # bb_type is populated for every batted ball even when the launch_speed

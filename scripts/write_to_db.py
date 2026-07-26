@@ -124,6 +124,11 @@ MIGRATE_HR_PREDICTIONS = [
     "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS hit_hr BOOLEAN",
     "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS actual_hr_count INTEGER",
     "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS book_markets TEXT",
+    # Manual analytics flag, not written by the pipeline -- set for Jun 22-23
+    # 2026 rows affected by the odds-staleness bug fixed in commit 75306fb
+    # (has_line could get stuck True on frozen/stale odds). Rows are kept,
+    # never deleted; performance/ROI queries should filter this out.
+    "ALTER TABLE hr_predictions ADD COLUMN IF NOT EXISTS exclude_from_analytics BOOLEAN DEFAULT FALSE",
 ]
 
 CREATE_TABLE = """
